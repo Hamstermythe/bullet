@@ -25,6 +25,7 @@ typedef struct {
     int score;
     int speed;
     int health;
+    int collisioning;
     Point size;
     Point position;
     Angle angle;
@@ -37,6 +38,7 @@ typedef struct {
     int speed;
     int radius;
     int damage;
+    int collisioning;
 } Bullet;
 // structure de l'asteroide
 typedef struct {
@@ -52,7 +54,7 @@ Point wnd_size = {640, 480};
 // spatial ship position
 Point spatial_ship_screen_position = {320, 360};
 // spatial ship information
-SpatialShip spatial_ship = {0, 0, 5, 100, {15, 30}, {500000000, 500000000}, {0, 1}};
+SpatialShip spatial_ship = {0, 0, 5, 100, 0, {15, 30}, {500000000, 500000000}, {0, 1}};
 
 #define SPATIAL_SHIP_SPEED 5
 #define ASTEROID_VIEWING_DISTANCE 360
@@ -169,7 +171,7 @@ void rotateSpatialShipLeft(SpatialShip *ship) {
 }
 // fonction de tir du vaisseau spatial
 Bullet shoot(SpatialShip *ship) {
-    Bullet bullet = {ship->position, ship->angle, 0, 10, wnd_size.x*0.05, 10};
+    Bullet bullet = {ship->position, ship->angle, 0, 10, wnd_size.x*0.05, 10, 0};
     return bullet;
 }
 Bullet* addBullet(Bullet* bullets, int bullet_size) {
@@ -178,10 +180,11 @@ Bullet* addBullet(Bullet* bullets, int bullet_size) {
         fprintf(stderr, "Allocation mémoire pour newBullets a échoué.\n");
         return NULL;
     }
-    for (int i = 0; i < bullet_size; i++) {
+    for (int i = 0; i < bullet_size - 1; i++) {
         newBullets[i] = bullets[i];
     }
     free(bullets);
+    newBullets[bullet_size - 1] = shoot(&spatial_ship);
     return newBullets;
 }
 Bullet* removeBullet(Bullet* bullets, int *bullet_size) {
@@ -215,12 +218,12 @@ void moveBullet(Bullet *bullet) {
     bullet->distance += bullet->speed;
 }
 // fonction de collision entre le bullet et l'asteroide
-bool bulletAsteroidCollision(Bullet bullet, Asteroid asteroid) {
+bool CollisionBulletAsteroid(Bullet bullet, Asteroid asteroid) {
     int distance = sqrt(pow(bullet.position.x - asteroid.position.x, 2) + pow(bullet.position.y - asteroid.position.y, 2));
     return distance < bullet.radius + asteroid.radius;
 }
 // fonction de collision entre le vaisseau spatial et l'asteroide
-bool spatialShipAsteroidCollision(SpatialShip ship, Asteroid asteroid) {
+bool CollisionSpatialShipAsteroid(SpatialShip ship, Asteroid asteroid) {
     int distance = sqrt(pow(ship.position.x - asteroid.position.x, 2) + pow(ship.position.y - asteroid.position.y, 2));
     return distance < ship.size.y + asteroid.radius;
 }
@@ -231,6 +234,16 @@ bool spatialShipAsteroidCollision(SpatialShip ship, Asteroid asteroid) {
 void DrawBullet(SDL_Renderer *renderer, Bullet bullet) {
     int radius = CalculateDrawRadius(bullet.position, bullet.radius);
     Point bullet_screen_position = CalculObjectScreenPosition(bullet.position);
+    if (bullet.collisioning > 0) {
+        // dessiner un nuage de 20 rectangles aux positions aléatoire comprise dans un rayon de cinq fois le rayon du bullet.
+        for (int i = 0; i < 20; i++) {
+            int x = bullet_screen_position.x + (rand() % (radius * 10)) - (radius * 5);
+            int y = bullet_screen_position.y + (rand() % (radius * 10)) - (radius * 5);
+            SDL_Rect rect = {x, y, 2, 2};
+            SDL_RenderFillRect(renderer, &rect);
+        }
+        return;
+    }
     SDL_SetRenderDrawColor(renderer, 255, 140, 0, 255); // orange foncé
     SDL_Rect rect = {bullet_screen_position.x - radius, bullet_screen_position.y - radius, radius * 2, radius * 2};
     SDL_RenderFillRect(renderer, &rect);
@@ -249,13 +262,21 @@ void DrawAsteroid(SDL_Renderer *renderer, Asteroid asteroid) {
 // draw a triangle for representing the spatial ship
 void DrawSpatialShip(SDL_Renderer *renderer) {
     // Define the vertices of the spatial ship
+    if (spatial_ship.collisioning > 0 && spatial_ship.collisioning % 2 == 0) {
+        spatial_ship.collisioning++;
+        if (spatial_ship.collisioning > 20) {
+            spatial_ship.collisioning = 0;
+        }
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255); // rouge
+    } else {
+        SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
+    }
     SDL_Point vertices[4] = {
             {spatial_ship_screen_position.x, spatial_ship_screen_position.y},
             {spatial_ship_screen_position.x - 10, spatial_ship_screen_position.y + 20},
             {spatial_ship_screen_position.x + 10, spatial_ship_screen_position.y + 20},
             {spatial_ship_screen_position.x, spatial_ship_screen_position.y}
     };
-    SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
     SDL_RenderDrawLines(renderer, vertices, 4);
 }
 
@@ -415,6 +436,42 @@ void Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bull, int bull
     }
     free(sorted_asteroids);
 }
+// fonction qui gère les mouvements
+void Move(Bullet* bullets, SpatialShip *ship) {
+    for (int i = 0; i < len(bullets); i++) {
+        bullets[i].position.y = bullets[i].position.y + (bullets[i].speed * bullets[i].angle.y);
+        bullets[i].position.x = bullets[i].position.x + (bullets[i].speed * bullets[i].angle.x);
+    }
+    ship->position.y = ship->position.y + (ship->speed * ship->angle.y);
+    ship->position.x = ship->position.x + (ship->speed * ship->angle.x);
+}
+// fonction qui gère les collisions
+void Collision(Asteroid*** asteroids, Bullet* bullets, int bullet_number, SpatialShip *ship) {
+    for (int b= 0; b < bullet_number; b++) {
+        if (bullets[b].collisioning > 0) {
+            continue;;
+        }
+        int y = b / wnd_size.y;
+        int x = b / wnd_size.x;
+        Asteroid* arr_asteroid = asteroids[y][x];
+        for (int i = 0; i < 4; i++) {
+            if (CollisionBulletAsteroid(bullets[b], arr_asteroid[i])) {
+                bullets[b].collisioning = 1;
+            }
+        }
+    }
+    if (ship->collisioning > 0) {
+        return;
+    }
+    int y = ship->position.y / wnd_size.y;
+    int x = ship->position.x / wnd_size.x;
+    Asteroid* arr_asteroid = asteroids[y][x];
+    for (int i = 0; i < 4; i++) {
+        if (CollisionSpatialShipAsteroid(*ship, arr_asteroid[i])) {
+            ship->collisioning = 1;
+        }
+    }
+}
 
 
 int main(int argc, char *argv[]) {
@@ -463,7 +520,9 @@ int main(int argc, char *argv[]) {
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black color
         SDL_RenderClear(renderer);
 
-        DrawSpatialShip(renderer);
+        Move(bullets, &spatial_ship);
+        Collision(asteroids, bullets, bullet_number, &spatial_ship);
+        Scene(renderer, asteroids, bullets, bullet_number, &spatial_ship);
 
         SDL_RenderPresent(renderer);
     }
