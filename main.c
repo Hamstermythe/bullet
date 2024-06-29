@@ -1,7 +1,8 @@
-#include <SDL2/SDL.h>
 #include <stdbool.h>
-#include <time.h>
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>  // Pour les fonctions mathématiques (pow, sqrt, cos, sin)
+#include <SDL2/SDL.h>  // Pour les fonctions SDL
 
 // Game production.
 // The player is a spatial ship, he is draw at the 3/4 down of the screen.
@@ -48,13 +49,13 @@ typedef struct {
 } Asteroid;
 
 // surface du jeu 
-Point game_surface = {1000000000, 1000000000};
+Point game_surface = {1000000, 1000000};
 // taille de la fenetre
 Point wnd_size = {640, 480};
 // spatial ship position
 Point spatial_ship_screen_position = {320, 360};
 // spatial ship information
-SpatialShip spatial_ship = {0, 0, 5, 100, 0, {15, 30}, {500000000, 500000000}, {0, 1}};
+SpatialShip spatial_ship = {0, 0, 5, 100, 0, {15, 30}, {500000, 500000}, {0, 1}};
 
 #define SPATIAL_SHIP_SPEED 5
 #define ASTEROID_VIEWING_DISTANCE 360
@@ -96,13 +97,17 @@ Asteroid** lineOfSpace() {
 // Fonction pour retourner un tableau de tableaux de tableaux d'astéroïdes (matrice)
 Asteroid*** Space() {
     int lign_number = game_surface.y/wnd_size.y;
-    Asteroid*** space = malloc(lign_number * sizeof(Asteroid*)); // Allouer de la mémoire pour 100 pointeurs vers des tableaux d'astéroïdes
+    Asteroid*** space = malloc(lign_number * sizeof(Asteroid**)); // Allouer de la mémoire pour 100 pointeurs vers des tableaux d'astéroïdes
     if (space == NULL) {
         fprintf(stderr, "Allocation mémoire pour Space a échoué.\n");
         return NULL;
     }
     for (int i = 0; i < lign_number; i++) {
         space[i] = lineOfSpace();
+        int bloc_number = game_surface.x/wnd_size.x * i * 4;
+        // fprintf("lign %d maked, number of bloc is \n", i, bloc_number);dont work
+        printf("lign %d maked, number of bloc is %d\n", i, bloc_number);
+
     }
     return space;
 }
@@ -129,7 +134,7 @@ int CalculDrawRadius(Point position, int radius) {
     float distance = CalculateViewingDistance(position);
     float ratio = (ASTEROID_VIEWING_DISTANCE - distance) / ASTEROID_VIEWING_DISTANCE;
     if (ratio < 0) ratio = 0; // Assurer que le ratio ne s'inverse pas
-    int radius = radius * ratio;
+    radius = radius * ratio;
     return radius;
 }
 // calcule la position à l'écran d'une astorïde en fonction de l'angle directionnel du vaisseau spatial
@@ -191,15 +196,15 @@ Bullet* removeBullet(Bullet* bullets, int *bullet_size) {
     if (bullet_size == 0) {
         return NULL;
     }
-    Bullet* newBullets = malloc(len(bullets) - 1 * sizeof(Bullet));
+    Bullet* newBullets = malloc(*bullet_size * sizeof(Bullet));
     if (newBullets == NULL) {
         fprintf(stderr, "Allocation mémoire pour newBullets a échoué.\n");
         return NULL;
     }
     int new_bullet_size = 0;
-    for (int i = 0; i < len(bullets); i++) {
+    for (int i = 0; i < *bullet_size; i++) {
         Bullet bullet = bullets[i];
-        if (bullet.distance < BULLET_LIFETIME) {
+        if (bullet.distance < BULLET_LIFETIME && bullet.collisioning < 60) {
             newBullets[i] = bullet;
             new_bullet_size++;
         }
@@ -232,7 +237,7 @@ bool CollisionSpatialShipAsteroid(SpatialShip ship, Asteroid asteroid) {
 
 // dessine un carré de 5 pixel reduit par la distance avec le vaisseau spatial
 void DrawBullet(SDL_Renderer *renderer, Bullet bullet) {
-    int radius = CalculateDrawRadius(bullet.position, bullet.radius);
+    int radius = CalculDrawRadius(bullet.position, bullet.radius);
     Point bullet_screen_position = CalculObjectScreenPosition(bullet.position);
     if (bullet.collisioning > 0) {
         // dessiner un nuage de 20 rectangles aux positions aléatoire comprise dans un rayon de cinq fois le rayon du bullet.
@@ -292,33 +297,27 @@ Point* GetVisibleBlocks(SpatialShip *ship) {
     blocks[3] = (Point) {blocks[0].x + 1, blocks[0].y + 1};
     return blocks;
 }
-void FreeVisibleBlocks(Point* blocks) {
-    free(blocks);
-}
 // fonction qui retourne les object de la scène à afficher
 Asteroid* GetBlocks(SDL_Renderer *renderer, Asteroid*** asteroids, SpatialShip *ship) {
     Asteroid* scene_object = malloc(16 * sizeof(Asteroid));
     int count = 0;
     Point* blocks = GetVisibleBlocks(ship);
-    for (int i = 0; i < len(blocks); i++) {
+    for (int i = 0; i < 4; i++) {
         Point block = blocks[i];
         Asteroid* block_asteroids = asteroids[block.x][block.y];
-        for (int j = 0; j < len(block_asteroids); j++) {
+        for (int j = 0; j < 4; j++) {
             Asteroid asteroid = block_asteroids[j];
             scene_object[count] = asteroid;
             count++;
         }
     }
-    FreeVisibleBlocks(blocks);
+    free(blocks);
     return scene_object;
 }
-void FreeSceneObject(Asteroid* scene_object) {
-    free(scene_object);
-}
 // fonction qui renvoie un tableau d'astéroïde dont les positions sont les positions à l'écran des astéroïdes d'origine.
-Asteroid* CalculSceneObjectScreenPosition(Asteroid* scene_object) {
+Asteroid* CalculAsteroidScreenPosition(Asteroid* scene_object) {
     Asteroid* scene_object_screen_position = malloc(16 * sizeof(Asteroid));
-    for (int i = 0; i < len(scene_object); i++) {
+    for (int i = 0; i < 16; i++) {
         Asteroid asteroid = scene_object[i];
         scene_object_screen_position[i].position = CalculObjectScreenPosition(asteroid.position);
         scene_object_screen_position[i].radius = asteroid.radius;
@@ -327,75 +326,89 @@ Asteroid* CalculSceneObjectScreenPosition(Asteroid* scene_object) {
     return scene_object_screen_position;
 }
 // fonction qui renvoie un tableau d'astéroïde après avoir trié celles ci par ordre croissant sur la position y.
-Asteroid* SortSceneObject(Asteroid* scene_object) {
+Asteroid* SortAsteroidSceneObject(Asteroid* scene_object) {
     Asteroid* sorted_scene_object = malloc(16 * sizeof(Asteroid));
     int count = 0;
-    for (;count < len(scene_object);) {
-        for (int i = 0; i < len(scene_object); i++) {
+    for (;count < 16;) {
+        printf("\nstart for find next fewer y, count: %d\n", count);
+        for (int i = 0; i < 16-count; i++) {
             bool lower = true;
-            int index_become_null = 0;
             Asteroid asteroid = scene_object[i];
-            for (int j=0; j < len(scene_object); j++) {
+            printf("testing value i: %d, is y: %d\n", i, asteroid.position.y);
+            for (int j=0; j < 16 - count; j++) {
                 if (j == i) {
                     continue;
                 }
                 if (asteroid.position.y < scene_object[j].position.y) {
                     lower = false;
-                    index_become_null = j;
                     break;
                 }
             }
             if (lower) {
+                printf("lower value finded at i: %d, is y: %d\n", i, asteroid.position.y);
                 sorted_scene_object[count] = asteroid;
                 count++;
-                Asteroid* scene_object_remover = malloc(16 * sizeof(Asteroid));
-                for (int j = 0; j < len(scene_object); j++) {
-                    if (j != index_become_null) {
-                        scene_object_remover[j] = scene_object[j];
+                if (count == 15) {
+                    free(scene_object);
+                    break;
+                }
+                Asteroid* scene_object_remover = malloc(16-count * sizeof(Asteroid));
+                for (int j = 0; j < 16-count; j++) {
+                    if (j != i) {
+                        if (j < i) {
+                            scene_object_remover[j] = scene_object[j];
+                        } else {
+                            scene_object_remover[j] = scene_object[j+1];
+                        }
                     }
                 }
                 free(scene_object);
+                printf("scene_object is free, count: %d\n", count);
                 scene_object = scene_object_remover;
+                printf("scene_object is reallocated\n");
+                break;
             }
         }
     }
     return sorted_scene_object;
 }
 // fonction qui renvoie un tableau de bullet dont les positions sont les positions à l'écran des bullets d'origine.
-Bullet* CalculBulletScreenPosition(Bullet* bullets) {
-    Bullet* bullets_screen_position = malloc(len(bullets) * sizeof(Bullet));
-    for (int i = 0; i < len(bullets); i++) {
+Bullet* CalculBulletScreenPosition(Bullet* bullets, int bullet_size) {
+    Bullet* bullets_screen_position = malloc(bullet_size * sizeof(Bullet));
+    for (int i = 0; i < bullet_size; i++) {
         Bullet bullet = bullets[i];
         bullets_screen_position[i].position = CalculObjectScreenPosition(bullet.position);
     }
     return bullets_screen_position;
 }
 // fonction qui renvoie un tableau de bullet après avoir trié celles ci par ordre croissant sur la position y.
-Bullet* SortBullet(Bullet* bullets) {
+Bullet* SortBullet(Bullet* bullets, int bullet_size) {
     Bullet* sorted_bullets = malloc(16 * sizeof(Bullet));
     int count = 0;
-    for (;count < len(bullets);) {
-        for (int i = 0; i < len(bullets); i++) {
+    for (;count < bullet_size;) {
+        for (int i = 0; i < bullet_size - count; i++) {
             bool lower = true;
-            int index_become_null = 0;
             Bullet bullet = bullets[i];
-            for (int j=0; j < len(bullets); j++) {
+            for (int j=0; j < bullet_size - count; j++) {
                 if (j == i) {
                     continue;
                 }
                 if (bullet.position.y < bullets[j].position.y) {
                     lower = false;
-                    index_become_null = j;
                     break;
                 }
             }
             if (lower) {
                 sorted_bullets[count] = bullet;
                 count++;
-                Bullet* bullets_remover = malloc(16 * sizeof(Bullet));
-                for (int j = 0; j < len(bullets); j++) {
-                    if (j != index_become_null) {
-                        bullets_remover[j] = bullets[j];
+                Bullet* bullets_remover = malloc((bullet_size - count) * sizeof(Bullet));
+                for (int j = 0; j < bullet_size - count; j++) {
+                    if (j != i) {
+                        if (j < i) {
+                            bullets_remover[j] = bullets[j];
+                        } else {
+                            bullets_remover[j-1] = bullets[j];
+                        }
                     }
                 }
                 free(bullets);
@@ -409,16 +422,17 @@ Bullet* SortBullet(Bullet* bullets) {
 
 //fonction qui gère la scène
 void Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bull, int bullet_number, SpatialShip *ship) {
-    Asteroid* scene_object_asteroids = GeteBlocks(renderer, asteroids, ship);
-    Asteroid* screen_position_asteroids = CalculSceneObjectScreenPosition(scene_object_asteroids);
-    free(scene_object_asteroids);
-    Asteroid* sorted_asteroids = SortSceneObject(screen_position_asteroids);
-    free(screen_position_asteroids);
+    Asteroid* scene_object_asteroids = GetBlocks(renderer, asteroids, ship);
+    Asteroid* screen_position_asteroids = CalculAsteroidScreenPosition(scene_object_asteroids);
+    Asteroid* sorted_asteroids = SortAsteroidSceneObject(screen_position_asteroids);
+    printf("asteroids sorted\n");
+    free(sorted_asteroids);
+    /*
 
-    Bullet* screen_position_bullets = CalculBulletScreenPosition(bull);
-    Bullet* sorted_bullets = SortBullet(screen_position_bullets);
-    free(screen_position_bullets);
-
+    Bullet* screen_position_bullets = CalculBulletScreenPosition(bull, bullet_number);
+    Bullet* sorted_bullets = SortBullet(screen_position_bullets, bullet_number);
+    printf("bullets sorted\n");
+    
     int bullets_index = 0;
     bool ship_drawed = false;
     for (int i = 0; i < 16; i++) {
@@ -435,18 +449,24 @@ void Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bull, int bull
         DrawAsteroid(renderer, sorted_asteroids[i]);
     }
     free(sorted_asteroids);
+    free(sorted_bullets);
+    */
 }
 // fonction qui gère les mouvements
-void Move(Bullet* bullets, SpatialShip *ship) {
-    for (int i = 0; i < len(bullets); i++) {
-        bullets[i].position.y = bullets[i].position.y + (bullets[i].speed * bullets[i].angle.y);
-        bullets[i].position.x = bullets[i].position.x + (bullets[i].speed * bullets[i].angle.x);
+void Move(Bullet* bullets, int bullet_size, SpatialShip *ship) {
+    for (int i = 0; i < bullet_size; i++) {
+        if (bullets[i].collisioning > 0) {
+            continue;
+        }
+        moveBullet(&bullets[i]);
     }
+    moveSpatialShip(ship);
     ship->position.y = ship->position.y + (ship->speed * ship->angle.y);
     ship->position.x = ship->position.x + (ship->speed * ship->angle.x);
 }
 // fonction qui gère les collisions
 void Collision(Asteroid*** asteroids, Bullet* bullets, int bullet_number, SpatialShip *ship) {
+    printf("collision bullet\n");
     for (int b= 0; b < bullet_number; b++) {
         if (bullets[b].collisioning > 0) {
             continue;;
@@ -460,12 +480,15 @@ void Collision(Asteroid*** asteroids, Bullet* bullets, int bullet_number, Spatia
             }
         }
     }
+    printf("collision ship\n");
     if (ship->collisioning > 0) {
         return;
     }
     int y = ship->position.y / wnd_size.y;
     int x = ship->position.x / wnd_size.x;
+    printf("asteroid selecting x : %d y : %d\n", x, y);
     Asteroid* arr_asteroid = asteroids[y][x];
+    printf("asteroid selected\n");
     for (int i = 0; i < 4; i++) {
         if (CollisionSpatialShipAsteroid(*ship, arr_asteroid[i])) {
             ship->collisioning = 1;
@@ -475,6 +498,12 @@ void Collision(Asteroid*** asteroids, Bullet* bullets, int bullet_number, Spatia
 
 
 int main(int argc, char *argv[]) {
+    // GAME OBJECTS
+    Bullet* bullets = NULL;
+    int bullet_number = 0;
+    Asteroid*** asteroids = Space();
+
+    // SDL INIT
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window *window = SDL_CreateWindow("Triangle Window",
                                           SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -483,20 +512,20 @@ int main(int argc, char *argv[]) {
                                           SDL_WINDOW_SHOWN);
 
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-    bool running = true;
     SDL_Event event;
 
-    // temps de maintenant
-    int last_bullet_shot = clock_gettime();
-    // unsized empty array of bullets
-    Bullet* bullets = NULL;
-    int bullet_number = 0;
-    // unsized empty array of asteroids
-    Asteroid*** asteroids = Space();
+    // RUNNING UTILITIES
+    bool running = true;
+    int last_bullet_shot = SDL_GetTicks();
+    const int frameDelay = 1000 / 60;
+    Uint32 frameStart;
+    int frameTime;
 
+    // SCREEN LOOP, IS DERECTLY CONTROLE THE PHYSIC OF THE GAME
     while (running) {
-
-
+        // TIME MANAGEMENT
+        frameStart = SDL_GetTicks();
+        // EVENT MANAGEMENT
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
                 running = false;
@@ -508,23 +537,28 @@ int main(int argc, char *argv[]) {
             } else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RIGHT) {
                 rotateSpatialShipRight(&spatial_ship);
             } else if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE) {
-                if (clock_gettime() - last_bullet_shot > 1000) {
-                    last_bullet_shot = clock_gettime();
+                if (SDL_GetTicks() - last_bullet_shot > 500) {
+                    last_bullet_shot = SDL_GetTicks();
                     // Shoot a bullet
                     bullet_number++;
-                    bullets = addBullet(&bullets, bullet_number);
+                    bullets = addBullet(bullets, bullet_number);
                 }
             }
         }
-
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black color
-        SDL_RenderClear(renderer);
-
-        Move(bullets, &spatial_ship);
+        // PHYSIC
+        Move(bullets, bullet_number, &spatial_ship);
         Collision(asteroids, bullets, bullet_number, &spatial_ship);
+        removeBullet(bullets, &bullet_number);
+        // DRAW
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Noir
+        SDL_RenderClear(renderer);
         Scene(renderer, asteroids, bullets, bullet_number, &spatial_ship);
-
+        // FRAME RATE
         SDL_RenderPresent(renderer);
+        frameTime = SDL_GetTicks() - frameStart;
+        if (frameTime < frameDelay) {
+            SDL_Delay(frameDelay - frameTime);
+        }
     }
 
     free(bullets);
