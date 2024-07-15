@@ -41,6 +41,7 @@ typedef struct {
     int radius;
     int damage;
     int collisioning;
+    Point collision;
 } Bullet;
 
 typedef struct {
@@ -59,6 +60,7 @@ typedef struct {
 #define ASTEROID_PER_BLOC 1
 #define DEG_TO_RAD 0.017453292519943295769236907684886
 #define RAD_TO_DEG 57.295779513082320876798154814105
+#define BULLET_EXPLOSION_DURATION 24
 
 // Globals
 Point wnd_size = {640, 480};
@@ -84,7 +86,7 @@ Bullet shoot(SpatialShip ship);
 Bullet* AddBullet(Bullet* bullets, int *bullet_size, SpatialShip spatial_ship);
 Bullet* RemoveBullet(Bullet* bullets, int *bullet_size);
 void moveBullets(Bullet* bullet, int bullet_size);
-bool CollisionBulletAsteroid(Bullet bullet, Asteroid asteroid);
+bool CollisionBulletAsteroid(Bullet bullet, Asteroid asteroid, SpatialShip ship);
 bool CollisionSpatialShipAsteroid(SpatialShip ship, Asteroid asteroid);
 void Collision(Bullet* bullets, int bullet_size, Asteroid*** asteroids, SpatialShip *spatial_ship);
 // void Move(Bullet* *bullets, int bullet_size, SpatialShip *ship);
@@ -94,7 +96,7 @@ void DrawAsteroid(SDL_Renderer *renderer, Asteroid asteroid);
 void DrawSpatialShip(SDL_Renderer *renderer, SpatialShip spatial_ship);
 void DrawMiniMap(SDL_Renderer *renderer, Asteroid*** asteroids, SpatialShip ship);
 
-Point* GetVisibleBlocks(SpatialShip spatial_ship);
+Point* GetAdjacentBlocks(Point position);
 Asteroid* GetVisibleAsteroids(Asteroid*** asteroids, SpatialShip spatial_ship);
 Asteroid* CalculAsteroidScreenPosition(Asteroid* scene_object, SpatialShip spatial_ship);
 Asteroid* SortAsteroidSceneObject(Asteroid* scene_object);
@@ -126,7 +128,7 @@ int main() {
     }
 
     game_surface = (Point) {wnd_size.x * 100, wnd_size.y * 100};
-    SpatialShip ship = {0, 0, SPATIAL_SHIP_SPEED, 100, 0, {20, 20}, {wnd_size.x, wnd_size.y}, {0, 1}};
+    SpatialShip ship = {0, 0, SPATIAL_SHIP_SPEED, 100, 0, {20, 20}, {wnd_size.x, wnd_size.y}, {0, -1}};
     Bullet* bullets = NULL;
     int bullet_size = 0;
     Asteroid*** asteroids = Space();
@@ -240,7 +242,7 @@ Asteroid* ChunkOfSpace(int bloc_position_y, int bloc_position_x) {
 }
 
 Asteroid** lineOfSpace(int bloc_position_y) {
-    int bloc_number = (game_surface.x / wnd_size.x) + 1;
+    int bloc_number = (game_surface.x / wnd_size.x);
     Asteroid** line = malloc(bloc_number * sizeof(Asteroid*));
     if (line == NULL) {
         fprintf(stderr, "Allocation mémoire pour lineOfSpace a échoué.\n");
@@ -253,7 +255,7 @@ Asteroid** lineOfSpace(int bloc_position_y) {
 }
 
 Asteroid*** Space() {
-    int lign_number = (game_surface.y / wnd_size.y) + 1;
+    int lign_number = (game_surface.y / wnd_size.y);
     Asteroid*** space = malloc(lign_number * sizeof(Asteroid**));
     if (space == NULL) {
         fprintf(stderr, "Allocation mémoire pour Space a échoué.\n");
@@ -268,8 +270,8 @@ Asteroid*** Space() {
 }
 
 void FreeSpace(Asteroid*** space) {
-    int lign_number = (game_surface.y / wnd_size.y) + 1;
-    int bloc_number = (game_surface.x / wnd_size.x) + 1;
+    int lign_number = (game_surface.y / wnd_size.y);
+    int bloc_number = (game_surface.x / wnd_size.x);
     for (int i = 0; i < lign_number; i++) {
         for (int j = 0; j < bloc_number; j++) {
             free(space[i][j]);
@@ -370,7 +372,7 @@ void rotateSpatialShipLeft(SpatialShip *ship) {
 }
 
 Bullet shoot(SpatialShip ship) {
-    Bullet bullet = {ship.position, ship.angle, 0, 20, 10, 10, 0};
+    Bullet bullet = (Bullet) {ship.position, ship.angle, 0, 20, 5, 10, 0, (Point) {0, 0}};
     return bullet;
 }
 
@@ -395,7 +397,7 @@ Bullet* AddBullet(Bullet* bullets, int *bullet_size, SpatialShip spatial_ship) {
 Bullet* RemoveBullet(Bullet* bullets, int *bullet_size) {
     int new_bullet_size = 0;
     for (int i = 0; i < *bullet_size; i++) {
-        if (bullets[i].distance < BULLET_LIFETIME) {
+        if (bullets[i].distance < BULLET_LIFETIME && bullets[i].collisioning < BULLET_EXPLOSION_DURATION) {
             new_bullet_size++;
         }
     }
@@ -412,7 +414,7 @@ Bullet* RemoveBullet(Bullet* bullets, int *bullet_size) {
     }
     int n = 0;
     for (int i = 0; i < *bullet_size; i++) {
-        if (bullets[i].distance < BULLET_LIFETIME) {
+        if (bullets[i].distance < BULLET_LIFETIME && bullets[i].collisioning < BULLET_EXPLOSION_DURATION) {
             new_bullets[n] = bullets[i];
             n++;
         }
@@ -425,22 +427,35 @@ Bullet* RemoveBullet(Bullet* bullets, int *bullet_size) {
 
 void moveBullets(Bullet* bullets, int bullet_size) {
     for (int i = 0; i < bullet_size; i++) {
+        if (bullets[i].collisioning > 0) {
+            bullets[i].collisioning += 1;
+            continue;
+        }
         bullets[i].position.x += (int)(bullets[i].angle.x * (float)(bullets[i].speed));
         bullets[i].position.y += (int)(bullets[i].angle.y * (float)(bullets[i].speed));
         bullets[i].distance += bullets[i].speed;
         bullets[i].position = gameSurfaceAntiDebordement(bullets[i].position);
     }
-    /*
-    bullet->position.x += (int)(bullet->angle.x * (float)(bullet->speed));
-    bullet->position.y += (int)(bullet->angle.y * (float)(bullet->speed));
-    bullet->distance += bullet->speed;
-    bullet->position = gameSurfaceAntiDebordement(bullet->position);
-    */
 }
 
-bool CollisionBulletAsteroid(Bullet bullet, Asteroid asteroid) {
-    float distance = sqrt(pow(asteroid.position.x - bullet.position.x, 2) + pow(asteroid.position.y - bullet.position.y, 2));
-    return distance < asteroid.radius + bullet.radius;
+bool CollisionBulletAsteroid(Bullet bullet, Asteroid asteroid, SpatialShip spatial_ship) {
+    int dist_with_ship = sqrt(pow(asteroid.position.x - spatial_ship.position.x, 2) + pow(asteroid.position.y - spatial_ship.position.y, 2));
+    float ratio_viewing_dist = 1.0 - ((float)dist_with_ship / (float)ASTEROID_VIEWING_DISTANCE);
+    if (ratio_viewing_dist <= 0) ratio_viewing_dist = 0;
+    int radius_asteroid_y = (float)(asteroid.radius) * (float)(ratio_viewing_dist) * 0.25;
+    int radius_asteroid_x = (float)(asteroid.radius) * (float)(ratio_viewing_dist);
+    
+    float dx = bullet.position.x - (asteroid.position.x);
+    float dy = bullet.position.y - asteroid.position.y;
+    printf("dist_with_ship: %d, ship_x: %d, asteroid_x: %d\n", dist_with_ship, spatial_ship.position.x, asteroid.position.x);
+    if (dist_with_ship < 600) {
+        printf("dx: %f, dy: %f, radius_asteroid_x: %d, radius_asteroid_y: %d\n", dx, dy, radius_asteroid_x, radius_asteroid_y);
+    }
+    if (((dx * dx) / (radius_asteroid_x * radius_asteroid_x)) + ((dy * dy) / (radius_asteroid_y * radius_asteroid_y)) <= 1) {
+        printf("COLLISION asteroid x: %d, bullet x: %d\n", asteroid.position.x, bullet.position.x);
+        return true;
+    }
+    return false;
 }
 
 bool CollisionSpatialShipAsteroid(SpatialShip ship, Asteroid asteroid) {
@@ -450,19 +465,25 @@ bool CollisionSpatialShipAsteroid(SpatialShip ship, Asteroid asteroid) {
 
 void Collision(Bullet* bullets, int bullet_size, Asteroid*** asteroids, SpatialShip *spatial_ship) {
     for (int i = 0; i < bullet_size; i++) {
-        if (&bullets[i] == NULL) {
+        if (bullets[i].collisioning > 0) {
             continue;
         }
-        int pos_y = bullets[i].position.y / wnd_size.y;
-        int pos_x = bullets[i].position.x / wnd_size.x;
-        Asteroid* arr_asteroid_a = asteroids[pos_y][pos_x];
-        for (int j = 0; j < ASTEROID_PER_BLOC; j++) {
-            if (CollisionBulletAsteroid(bullets[i], arr_asteroid_a[j])) {
-                bullets[i].collisioning = 1;
-                asteroids[pos_y][pos_x][j].health--;
-                break;
+        Point* arr_block = GetAdjacentBlocks(bullets[i].position);
+        for (int block_pos = 0; block_pos < VISIBLE_BLOCK_NUMBER; block_pos++) {
+            Asteroid* arr_asteroid_a = asteroids[arr_block[block_pos].y][arr_block[block_pos].x];
+            for (int j = 0; j < ASTEROID_PER_BLOC; j++) {
+                if (arr_asteroid_a[j].health <= 0) {
+                    continue;
+                }
+                if (CollisionBulletAsteroid(bullets[i], arr_asteroid_a[j], *spatial_ship)) {
+                    bullets[i].collisioning = 1;
+                    bullets[i].collision = arr_asteroid_a[j].position;
+                    arr_asteroid_a[j].health -= bullets[i].damage;
+                    break;
+                }
             }
         }
+        free(arr_block);
     }
     int pos_y = spatial_ship->position.y / wnd_size.y;
     int pos_x = spatial_ship->position.x / wnd_size.x;
@@ -488,21 +509,48 @@ void Move(Bullet* *bullets, int bullet_size, SpatialShip *spatial_ship) {
 
 void DrawBullet(SDL_Renderer *renderer, Bullet bullet) {
     if (bullet.collisioning > 0) {
-        // dessiner un nuage de 20 rectangles aux positions aléatoire comprise dans un rayon de cinq fois le rayon du bullet.
-        SDL_SetRenderDrawColor(renderer, 255, 140, 0, 255); // orange foncé
-        for (int i = 0; i < 20; i++) {
-            int x = bullet.position.x;// + (rand() % (radius * 10));// - (radius * 5);
-            int y = bullet.position.y;// + (rand() % (radius * 10));// - (radius * 5);
-            SDL_Rect rect = {x, y, 2, 2};
-            SDL_RenderFillRect(renderer, &rect);
+        // dessiner un nuage de 40 rectangles de couleur rouge ou gris, de 2 pixels de rayon, aux positions aléatoire comprise dans un rayon de 2 fois le rayon du bullet.*
+        int radius = (float)((float)(bullet.radius) * 3) * (float)((float)(bullet.collisioning) / (float)(BULLET_EXPLOSION_DURATION));
+        int radius_square = radius * radius;
+        int center = radius_square / 4;
+        int middle = center * 2;
+        //int out = middle * 2;
+        for (int w = 0; w < radius * 2; w++) {
+            for (int h = 0; h < radius * 2; h++) {
+                int dx = radius - w;
+                int dy = radius - h;
+                int square_dist = dx * dx + dy * dy;
+                if (rand() % 3 == 0) {
+                    if (square_dist > center && square_dist <= middle) {
+                        SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
+                        SDL_RenderDrawPoint(renderer, bullet.position.x + dx, bullet.position.y + dy);
+                    } else if (square_dist <= radius_square && square_dist > middle && bullet.collisioning < (BULLET_EXPLOSION_DURATION * 7) / 8) {
+                        SDL_SetRenderDrawColor(renderer, 250, 100, 0, 255);
+                        SDL_RenderDrawPoint(renderer, bullet.position.x + dx, bullet.position.y + dy);
+                    }
+                }
+            }
         }
         return;
     }
-    SDL_Rect rect = {bullet.position.x - bullet.radius, bullet.position.y - bullet.radius, bullet.radius * 2, bullet.radius * 2};
-    SDL_RenderFillRect(renderer, &rect);
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+    for (int w = 0; w < bullet.radius * 2; w++) {
+        for (int h = 0; h < bullet.radius * 2; h++) {
+            int dx = bullet.radius - w;
+            int dy = bullet.radius - h;
+            if ((dx * dx + dy * dy) <= (bullet.radius * bullet.radius)) {
+                SDL_RenderDrawPoint(renderer, bullet.position.x + dx, bullet.position.y + dy);
+            }
+        }
+    }
+    //SDL_Rect rect = {bullet.position.x - bullet.radius, bullet.position.y - bullet.radius, bullet.radius * 2, bullet.radius * 2};
+    //SDL_RenderFillRect(renderer, &rect);
 }
 
 void DrawAsteroid(SDL_Renderer *renderer, Asteroid asteroid) {
+    if (asteroid.health <= 0) {
+        return;
+    }
     SDL_SetRenderDrawColor(renderer, asteroid.color.r, asteroid.color.g, asteroid.color.b, asteroid.color.a);
     for (int w = 0; w < asteroid.radius * 2; w++) {
         for (int h = 0; h < asteroid.radius * 2; h++) {
@@ -540,6 +588,9 @@ void DrawMiniMap(SDL_Renderer *renderer, Asteroid*** asteroids, SpatialShip ship
     int centre_y = (size_y / 2) + size_y;
     Asteroid* visible_asteroid = GetVisibleAsteroids(asteroids, ship);
     for (int i = 0; i < VISIBLE_BLOCK_NUMBER * ASTEROID_PER_BLOC; i++) {
+        if (visible_asteroid[i].health <= 0) {
+            continue;
+        }
         int x = ((visible_asteroid[i].position.x - ship.position.x) / 10) + centre_x;
         int y = ((visible_asteroid[i].position.y - ship.position.y) / 10) + centre_y;
         SDL_Rect rect = {x-4, y-4, 8, 8};
@@ -560,9 +611,9 @@ void DrawMiniMap(SDL_Renderer *renderer, Asteroid*** asteroids, SpatialShip ship
 
 
 // retourne les index de colonne et de ligne des blocs visibles
-Point* GetVisibleBlocks(SpatialShip spatial_ship) {
-    int view_block_x = (spatial_ship.position.x / wnd_size.x);
-    int view_block_y = (spatial_ship.position.y / wnd_size.y);
+Point* GetAdjacentBlocks(Point position) {
+    int view_block_x = (position.x / wnd_size.x);
+    int view_block_y = (position.y / wnd_size.y);
     Point* visible_blocks = malloc(VISIBLE_BLOCK_NUMBER * sizeof(Point));
     if (visible_blocks == NULL) {
         fprintf(stderr, "Allocation de mémoire pour les blocs visibles a échoué.\n");
@@ -581,13 +632,13 @@ Point* GetVisibleBlocks(SpatialShip spatial_ship) {
     int max_y = game_surface.y / wnd_size.y;
     for (int i = 0; i < VISIBLE_BLOCK_NUMBER; i++) {
         if (visible_blocks[i].x < 0) {
-            visible_blocks[i].x = max_x + visible_blocks[i].x;
-        } else if (visible_blocks[i].x > max_x) {
+            visible_blocks[i].x = max_x-1 + visible_blocks[i].x;
+        } else if (visible_blocks[i].x >= max_x) {
             visible_blocks[i].x = visible_blocks[i].x - max_x;
         }
         if (visible_blocks[i].y < 0) {
-            visible_blocks[i].y = max_y + visible_blocks[i].y;
-        } else if (visible_blocks[i].y > max_y) {
+            visible_blocks[i].y = max_y-1 + visible_blocks[i].y;
+        } else if (visible_blocks[i].y >= max_y) {
             visible_blocks[i].y = visible_blocks[i].y - max_y;
         }
     }
@@ -595,7 +646,7 @@ Point* GetVisibleBlocks(SpatialShip spatial_ship) {
 }
 // retournr la liste des astéroides visibles
 Asteroid* GetVisibleAsteroids(Asteroid*** asteroids, SpatialShip spatial_ship) {
-    Point* visible_blocks = GetVisibleBlocks(spatial_ship);
+    Point* visible_blocks = GetAdjacentBlocks(spatial_ship.position);
     Asteroid* visible_asteroids = malloc((VISIBLE_BLOCK_NUMBER * ASTEROID_PER_BLOC) * sizeof(Asteroid));
     int index = 0;
     for (int i = 0; i < VISIBLE_BLOCK_NUMBER; i++) {
@@ -631,7 +682,7 @@ Bullet* BulletsScreenPosition(Bullet* bullets, int bullet_size, SpatialShip spat
     Bullet* screen_bullets = malloc(bullet_size * sizeof(Bullet));
     for (int i = 0; i < bullet_size; i++) {
         Point screen_position = CalculObjectScreenPosition(bullets[i].position, spatial_ship);
-        screen_bullets[i] = (Bullet){screen_position, bullets[i].angle, bullets[i].distance, bullets[i].speed, bullets[i].radius, bullets[i].damage, bullets[i].collisioning};
+        screen_bullets[i] = (Bullet){screen_position, bullets[i].angle, bullets[i].distance, bullets[i].speed, bullets[i].radius, bullets[i].damage, bullets[i].collisioning, bullets[i].collision};
         //screen_bullets[i].position = screen_position;
     }
     return screen_bullets;
@@ -685,8 +736,6 @@ void Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bullets, int b
         float ratio = 1.0 - ((float)(decalage) / (float)(visible_asteroids[i].radius));
         float radius_multiplier = 0.25 * ratio;
         if (!ship_drawed && visible_asteroids[i].position.y + visible_asteroids[i].radius * radius_multiplier > spatial_ship_screen_position.y) {
-            printf("ratio: %f, radius_multiplier: %f\n", ratio, radius_multiplier);
-            printf("Draw ship, asteroid y: %d, index: %d\n", visible_asteroids[i].position.y, i); 
             DrawSpatialShip(renderer, ship);
             ship_drawed = true;
         }
@@ -699,15 +748,7 @@ void Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bullets, int b
         DrawSpatialShip(renderer, ship);
     }
     DrawMiniMap(renderer, asteroids, ship);
-    /*
-    for (int i = 0; i < ASTEROID_PER_BLOC * VISIBLE_BLOCK_NUMBER; i++) {
-        DrawAsteroid(renderer, visible_asteroids[i], ship);
-    }
-    for (int i = 0; i < bullet_number; i++) {
-        DrawBullet(renderer, bullets[i], ship);
-    }
-    DrawSpatialShip(renderer, ship);
-    */
+
     free(visible_asteroids);
     free(screen_pos_bullets);
 }
