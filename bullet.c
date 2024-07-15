@@ -31,6 +31,7 @@ typedef struct {
     Point size;
     Point position;
     Angle angle;
+    int rotation_x;
 } SpatialShip;
 
 typedef struct {
@@ -63,7 +64,7 @@ typedef struct {
 #define BULLET_EXPLOSION_DURATION 24
 
 // Globals
-Point wnd_size = {640, 480};
+Point wnd_size = {720, 540}; //{640, 480};
 Point spatial_ship_screen_position = {320, 360};
 Point game_surface = {0, 0}; //{1000000, 1000000};
 
@@ -128,7 +129,7 @@ int main() {
     }
 
     game_surface = (Point) {wnd_size.x * 100, wnd_size.y * 100};
-    SpatialShip ship = {0, 0, SPATIAL_SHIP_SPEED, 100, 0, {20, 20}, {wnd_size.x, wnd_size.y}, {0, -1}};
+    SpatialShip ship = {0, 0, SPATIAL_SHIP_SPEED, 100, 0, {20, 20}, {wnd_size.x, wnd_size.y}, {0, -1}, 0};
     Bullet* bullets = NULL;
     int bullet_size = 0;
     Asteroid*** asteroids = Space();
@@ -148,10 +149,12 @@ int main() {
                         break;
                     case SDLK_LEFT:
                         rotateSpatialShipLeft(&ship);
+                        ship.rotation_x = -1;
                         printf("spatial_ship angle x: %f  y: %f\n", ship.angle.x, ship.angle.y);
                         break;
                     case SDLK_RIGHT:
                         rotateSpatialShipRight(&ship);
+                        ship.rotation_x = 1;
                         printf("spatial_ship angle x: %f  y: %f\n", ship.angle.x, ship.angle.y);
                         break;
                     case SDLK_UP:
@@ -167,22 +170,25 @@ int main() {
                             } else {
                                 bullets = NULL;
                             }
-                            //bullet_size++;
-                            //bullets = AddBullet(bullets, bullet_size, ship);
                             lastBulletShotTime = SDL_GetTicks();
                         }
+                        break;
+                }
+            } else if (event.type == SDL_KEYUP) {
+                switch (event.key.keysym.sym) {
+                    case SDLK_LEFT:
+                        ship.rotation_x = 0;
+                        break;
+                    case SDLK_RIGHT:
+                        ship.rotation_x = 0;
                         break;
                 }
             }
         }
 
-        //printf("spatial_ship angle x: %f  y: %f\n", ship.angle.x, ship.angle.y);
-        //Move(&bullets, bullet_size, &ship);
-        //moveSpatialShip(&ship);
+        moveSpatialShip(&ship);
         moveBullets(bullets, bullet_size);
-        //printf("before collision\n");
         Collision(bullets, bullet_size, asteroids, &ship);
-        //printf("Bullet size before: %d\n", bullet_size);
         Bullet* temp = RemoveBullet(bullets, &bullet_size);
         if (temp != NULL) {
             // FUITE
@@ -190,7 +196,6 @@ int main() {
         } else {
             bullets = NULL;
         }
-        //printf("Bullet size after: %d\n", bullet_size);
 
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
@@ -288,12 +293,12 @@ void FreeSpace(Asteroid*** space) {
 Point gameSurfaceAntiDebordement(Point position) {
     if (position.x < 0) {
         position.x = position.x + game_surface.x;
-    } else if (position.x > game_surface.x) {
+    } else if (position.x >= game_surface.x) {
         position.x = position.x - game_surface.x;
     }
     if (position.y < 0) {
         position.y = position.y + game_surface.y;
-    } else if (position.y > game_surface.y) {
+    } else if (position.y >= game_surface.y) {
         position.y = position.y - game_surface.y;
     }
     return position;
@@ -318,9 +323,9 @@ Point CalculObjectScreenPosition(Point position, SpatialShip spatial_ship) {
     float distance = CalculateViewingDistance(position, spatial_ship);
     float angle_deg = atan2(deltaY, deltaX) * RAD_TO_DEG;
     angle_deg += 180;
-    //float angle_vaisseau = atan2(spatial_ship.angle.y, spatial_ship.angle.x) * RAD_TO_DEG;
+    float angle_vaisseau = atan2(spatial_ship.angle.y, spatial_ship.angle.x) * RAD_TO_DEG;
     //printf("angles : %f %f\n", angle_deg, angle_vaisseau);
-    //angle_deg += angle_vaisseau;
+    angle_deg -= angle_vaisseau + 90;
     if (angle_deg > 360) angle_deg -= 360;
     if (angle_deg < 0) angle_deg += 360;
     angle_deg -= 180;
@@ -353,7 +358,7 @@ void moveSpatialShip(SpatialShip *ship) {
 
 void rotateSpatialShipRight(SpatialShip *ship) {
     float angle = atan2(ship->angle.y, ship->angle.x) * RAD_TO_DEG;
-    angle -= 1 + 180;  // Rotate by 1 degree
+    angle += 1 + 180;  // Rotate by 1 degree
     if (angle < 0) angle += 360;
     angle -= 180;
     angle *= DEG_TO_RAD;
@@ -363,7 +368,7 @@ void rotateSpatialShipRight(SpatialShip *ship) {
 
 void rotateSpatialShipLeft(SpatialShip *ship) {
     float angle = atan2(ship->angle.y, ship->angle.x) * RAD_TO_DEG;
-    angle += 1 + 180;  // Rotate by 1 degree
+    angle -= 1 + 180;  // Rotate by 1 degree
     if (angle > 360) angle -= 360;
     angle -= 180;
     angle *= DEG_TO_RAD;
@@ -447,12 +452,7 @@ bool CollisionBulletAsteroid(Bullet bullet, Asteroid asteroid, SpatialShip spati
     
     float dx = bullet.position.x - (asteroid.position.x);
     float dy = bullet.position.y - asteroid.position.y;
-    printf("dist_with_ship: %d, ship_x: %d, asteroid_x: %d\n", dist_with_ship, spatial_ship.position.x, asteroid.position.x);
-    if (dist_with_ship < 600) {
-        printf("dx: %f, dy: %f, radius_asteroid_x: %d, radius_asteroid_y: %d\n", dx, dy, radius_asteroid_x, radius_asteroid_y);
-    }
     if (((dx * dx) / (radius_asteroid_x * radius_asteroid_x)) + ((dy * dy) / (radius_asteroid_y * radius_asteroid_y)) <= 1) {
-        printf("COLLISION asteroid x: %d, bullet x: %d\n", asteroid.position.x, bullet.position.x);
         return true;
     }
     return false;
@@ -564,15 +564,39 @@ void DrawAsteroid(SDL_Renderer *renderer, Asteroid asteroid) {
 }
 
 void DrawSpatialShip(SDL_Renderer *renderer, SpatialShip spatial_ship) {
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-    SDL_Rect rect = {spatial_ship_screen_position.x - spatial_ship.size.x / 2, spatial_ship_screen_position.y - spatial_ship.size.y / 2, spatial_ship.size.x, spatial_ship.size.y};
-    SDL_RenderFillRect(renderer, &rect);
+    // dessiner un triangle à la largeur du vaisseau lorsque rotation_x vaut 0, et de demi-largeur lorsque rotation_x vaut 1 ou -1
+    // si la rotationest vers la gauche la moitié gauche du vaiseau est plus foncé que la moitié droite, et inversement
+    int start_y = spatial_ship_screen_position.y - (spatial_ship.size.y / 2);
+    for (int y = 0; y < spatial_ship.size.y; y++) {
+        int width = (float)(spatial_ship.size.x) * (float)((float)(y) / (float)(spatial_ship.size.y));
+        if (spatial_ship.rotation_x != 0) {
+            width /= 2;
+        }
+        int pos_y = start_y + y;
+        if (spatial_ship.rotation_x == 0) {
+            SDL_SetRenderDrawColor(renderer, 105, 105, 105, 255);
+            SDL_RenderDrawLine(renderer, spatial_ship_screen_position.x - width, pos_y, spatial_ship_screen_position.x, pos_y);
+            SDL_SetRenderDrawColor(renderer, 115, 115, 115, 255);
+            SDL_RenderDrawLine(renderer, spatial_ship_screen_position.x, pos_y, spatial_ship_screen_position.x + width, pos_y);
+        } else if (spatial_ship.rotation_x == 1) {
+            SDL_SetRenderDrawColor(renderer, 140, 140, 140, 255);
+            SDL_RenderDrawLine(renderer, spatial_ship_screen_position.x - width, pos_y, spatial_ship_screen_position.x, pos_y);
+            SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
+            SDL_RenderDrawLine(renderer, spatial_ship_screen_position.x, pos_y, spatial_ship_screen_position.x + width, pos_y);
+        } else if (spatial_ship.rotation_x == -1) {
+            SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
+            SDL_RenderDrawLine(renderer, spatial_ship_screen_position.x - width, pos_y, spatial_ship_screen_position.x, pos_y);
+            SDL_SetRenderDrawColor(renderer, 140, 140, 140, 255);
+            SDL_RenderDrawLine(renderer, spatial_ship_screen_position.x, pos_y, spatial_ship_screen_position.x + width, pos_y);
+        }
+    }
     // viseur du vaisseau
     SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-    int add_x = 20 * spatial_ship.angle.x;
-    int add_y = 20 * spatial_ship.angle.y;
-    int width = 5;
-    SDL_Rect viseur = {spatial_ship_screen_position.x + add_x - width / 2, spatial_ship_screen_position.y + add_y - width / 2, width, width};
+    // int add_x = 20;// * spatial_ship.angle.x;
+    int add_y = 20;// * spatial_ship.angle.y;
+    int width = 4;
+    //SDL_Rect viseur = {spatial_ship_screen_position.x + add_x - width / 2, spatial_ship_screen_position.y + add_y - width / 2, width, width};
+    SDL_Rect viseur = {spatial_ship_screen_position.x - (width/2), spatial_ship_screen_position.y - add_y, width, width};
     SDL_RenderFillRect(renderer, &viseur);
 }
 
@@ -628,18 +652,18 @@ Point* GetAdjacentBlocks(Point position) {
     visible_blocks[6] = (Point){view_block_x - 1, view_block_y + 1};
     visible_blocks[7] = (Point){view_block_x, view_block_y + 1};
     visible_blocks[8] = (Point){view_block_x + 1, view_block_y + 1};
-    int max_x = game_surface.x / wnd_size.x;
-    int max_y = game_surface.y / wnd_size.y;
+    int max_x = (game_surface.x / wnd_size.x) - 1;
+    int max_y = (game_surface.y / wnd_size.y) - 1;
     for (int i = 0; i < VISIBLE_BLOCK_NUMBER; i++) {
         if (visible_blocks[i].x < 0) {
-            visible_blocks[i].x = max_x-1 + visible_blocks[i].x;
-        } else if (visible_blocks[i].x >= max_x) {
-            visible_blocks[i].x = visible_blocks[i].x - max_x;
+            visible_blocks[i].x = max_x; // + visible_blocks[i].x;
+        } else if (visible_blocks[i].x > max_x) {
+            visible_blocks[i].x = 0; //visible_blocks[i].x - max_x;
         }
         if (visible_blocks[i].y < 0) {
-            visible_blocks[i].y = max_y-1 + visible_blocks[i].y;
-        } else if (visible_blocks[i].y >= max_y) {
-            visible_blocks[i].y = visible_blocks[i].y - max_y;
+            visible_blocks[i].y = max_y; // + visible_blocks[i].y;
+        } else if (visible_blocks[i].y > max_y) {
+            visible_blocks[i].y = 0; //visible_blocks[i].y - max_y;
         }
     }
     return visible_blocks;
@@ -651,16 +675,21 @@ Asteroid* GetVisibleAsteroids(Asteroid*** asteroids, SpatialShip spatial_ship) {
     int index = 0;
     for (int i = 0; i < VISIBLE_BLOCK_NUMBER; i++) {
         Point block = visible_blocks[i];
-        int block_x = block.x;
-        int block_y = block.y;
-        Asteroid* asteroids_in_block = asteroids[block_y][block_x];
+        Asteroid* asteroids_in_block = asteroids[block.y][block.x];
         for (int j = 0; j < ASTEROID_PER_BLOC; j++) {
-            if (&asteroids_in_block[j] == NULL) {
-                fprintf(stderr, "Reallocation de mémoire pour les astéroïdes visibles a échoué.\n");
-                //return NULL;
-                visible_asteroids[index] = (Asteroid) {(Point) {0, 0}, (Color) {100, 100, 100, 255}, 0, 0};
-            }
             visible_asteroids[index] = (Asteroid) {asteroids_in_block[j].position, asteroids_in_block[j].color, asteroids_in_block[j].radius, asteroids_in_block[j].health};
+            int tcheck_dist_x = (visible_asteroids[index].position.x - spatial_ship.position.x);
+            if (tcheck_dist_x > wnd_size.x * 2) {
+                visible_asteroids[index].position.x -= game_surface.x;
+            } else if (tcheck_dist_x < -wnd_size.x * 2) {
+                visible_asteroids[index].position.x += game_surface.x;
+            }
+            int tcheck_dist_y = (visible_asteroids[index].position.y - spatial_ship.position.y);
+            if (tcheck_dist_y > wnd_size.y * 2) {
+                visible_asteroids[index].position.y -= game_surface.y;
+            } else if (tcheck_dist_y < -wnd_size.y * 2) {
+                visible_asteroids[index].position.y += game_surface.y;
+            }
             index++;
         }
     }
