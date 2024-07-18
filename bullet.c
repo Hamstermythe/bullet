@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 
 
 // Structure Definitions
@@ -66,13 +67,14 @@ typedef struct {
 
 // Globals
 int appli_step = 0;
+TTF_Font* font = NULL;
 Point wnd_size = {720, 540}; //{640, 480};
 Point spatial_ship_screen_position = {360, 405};
 Point game_surface = {0, 0}; //{1000000, 1000000};
 
 // Function Declarations
 int Appli_openning();
-int Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *running, Uint32 *lastBulletShotTime, Asteroid*** *asteroids, Bullet* *bullets, int *bullet_size, SpatialShip *ship);
+SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *running, Uint32 *lastBulletShotTime, Asteroid*** *asteroids, Bullet* *bullets, int *bullet_size, SpatialShip *ship);
 int Appli_game_over();
 
 Point NewAsteroidPosition();
@@ -105,7 +107,7 @@ void DrawBullet(SDL_Renderer *renderer, Bullet bullet);
 void DrawAsteroid(SDL_Renderer *renderer, Asteroid asteroid);
 void DrawSpatialShip(SDL_Renderer *renderer, SpatialShip *spatial_ship);
 void DrawMiniMap(SDL_Renderer *renderer, Asteroid*** asteroids, SpatialShip ship);
-void DrawHUD(SDL_Renderer *renderer, SpatialShip ship);
+SDL_Texture* DrawHUD(SDL_Renderer *renderer, SpatialShip ship);
 
 Point* GetAdjacentBlocks(Point position);
 Asteroid* GetVisibleAsteroids(Asteroid*** asteroids, SpatialShip spatial_ship);
@@ -113,7 +115,7 @@ Asteroid* CalculAsteroidScreenPosition(Asteroid* scene_object, SpatialShip spati
 Asteroid* SortAsteroidSceneObject(Asteroid* scene_object);
 Bullet* BulletsScreenPosition(Bullet* bullets, int bullet_size, SpatialShip spatial_ship);
 Bullet* SortBullet(Bullet* bullets, int bullet_size);
-void Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bullets, int bullet_number, SpatialShip *ship);
+SDL_Texture* Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bullets, int bullet_number, SpatialShip *ship);
 
 // Main Function
 //int main(int argc, char* argv[]) {
@@ -122,19 +124,28 @@ int main() {
         fprintf(stderr, "Could not initialize SDL: %s\n", SDL_GetError());
         return 1;
     }
-
-    SDL_Window* window = SDL_CreateWindow("Space Shooter", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, wnd_size.x, wnd_size.y, SDL_WINDOW_SHOWN);
-    if (window == NULL) {
-        fprintf(stderr, "Could not create window: %s\n", SDL_GetError());
+    if (TTF_Init() == -1) {
+        fprintf(stderr, "Échec de l'initialisation de SDL_ttf: %s\n", TTF_GetError());
         SDL_Quit();
         return 1;
     }
-
+    SDL_Window* window = SDL_CreateWindow("Space Shooter", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, wnd_size.x, wnd_size.y, SDL_WINDOW_SHOWN);
+    if (window == NULL) {
+        fprintf(stderr, "Could not create window: %s\n", SDL_GetError());
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     if (renderer == NULL) {
         fprintf(stderr, "Could not create renderer: %s\n", SDL_GetError());
         SDL_DestroyWindow(window);
         SDL_Quit();
+        return 1;
+    }
+    font = TTF_OpenFont("font/Ubuntu-MI.ttf", 24); // Remplacez par le chemin de votre police
+    if (!font) {
+        fprintf(stderr, "Error: %s\n", TTF_GetError());
         return 1;
     }
 
@@ -148,7 +159,9 @@ int main() {
 
     bool running = true;
     SDL_Event event;
+    SDL_Texture* texture;
     while (running) {
+        SDL_DestroyTexture(texture);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
 
@@ -156,21 +169,22 @@ int main() {
             appli_step = Appli_openning();
             appli_step = 1;
         } else if (appli_step == 1) {
-            appli_step = Appli_playing(renderer, event, &running, &lastBulletShotTime, &asteroids, &bullets, &bullet_size, &ship);
+            texture = Appli_playing(renderer, event, &running, &lastBulletShotTime, &asteroids, &bullets, &bullet_size, &ship);
         } else if (appli_step == 2) {
             appli_step = Appli_game_over();
         }
 
         SDL_RenderPresent(renderer);
-        SDL_Delay(16);  // Roughly 60 frames per second
+        SDL_Delay(16);
     }
 
     FreeSpace(asteroids);
-    if (bullets != NULL) {
-        free(bullets);
-    }
+    free(bullets);
+
+    TTF_CloseFont(font);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    TTF_Quit();
     SDL_Quit();
     return 0;
 }
@@ -179,7 +193,7 @@ int Appli_openning() {
     return 0;
 }
 
-int Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *running, Uint32 *lastBulletShotTime, Asteroid*** *asteroids, Bullet* *bullets, int *bullet_size, SpatialShip *ship) {
+SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *running, Uint32 *lastBulletShotTime, Asteroid*** *asteroids, Bullet* *bullets, int *bullet_size, SpatialShip *ship) {
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
             running = false;
@@ -240,14 +254,14 @@ int Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *running, Uint32
         *bullets = NULL;
     }
     // free(temp); cause a crash because bullets become empty. Why a laek is generated on bullets reallocation?
-    Scene(renderer, *asteroids, *bullets, *bullet_size, ship);
+    SDL_Texture* texture = Scene(renderer, *asteroids, *bullets, *bullet_size, ship);
     ReduceAsteroidHealth(asteroids);
     /*
     if (ship->health <= -(float)(BULLET_EXPLOSION_DURATION)) {
-        return 2;
+        appli_step 2;
     }
     */
-    return 1;
+    return texture;
 }
 
 int Appli_game_over() {
@@ -257,7 +271,8 @@ int Appli_game_over() {
 
 // Implementations of previously declared functions
 Point NewAsteroidPosition() {
-    // return (Point) {0, 0}; //wnd_size.x / 2, wnd_size.y / 2};
+    //  debug values
+    // return (Point) {0, 0}; //wnd_size.x / 2, wnd_size.y / 2}; 
     return (Point) {rand() % (int)(wnd_size.x), rand() % (int)(wnd_size.y)};
 }
 Color NewAsteroidColor() {
@@ -348,7 +363,7 @@ Point gameSurfaceAntiDebordement(Point position) {
     }
     return position;
 }
-// retourne la distance entre un point et le vaisseau spatial.
+// retourne la distance entre un point et le vaisseau spatial
 int CalculateViewingDistance(Point position, SpatialShip spatial_ship) {
     return (int)sqrt(pow(position.x - spatial_ship.position.x , 2) + pow(position.y - spatial_ship.position.y , 2));
 }
@@ -360,7 +375,7 @@ int CalculDrawRadius(Point position, int radius, SpatialShip spatial_ship) {
     radius = radius * ratio;
     return radius;
 }
-
+// calcul la position à l'écran d'un objet en fonction de la rotation du vaisseau spatial, celui-ci pointant toujours vers le haut de l'écran
 Point CalculObjectScreenPosition(Point position, SpatialShip spatial_ship) {
     // Calcul des deltas de position par rapport au vaisseau spatial
     float deltaX = (float)(position.x - spatial_ship.position.x);
@@ -533,15 +548,39 @@ void Collision(Bullet* bullets, int bullet_size, Asteroid*** asteroids, SpatialS
                     float add_y = bullets[i].angle.y * (float)(m);
                     bullets[i].position.x = originale_pos.x + add_x;
                     bullets[i].position.y = originale_pos.y + add_y;
+        /* don't work, the bullet can't touch asteroid if he is on the other side of the game surface, this even if bullet position become in the same block as the asteroid
+
+        int tcheck_dist_x = (bullets[i].position.x - arr_asteroid_a[j].position.x);
+        if (abs(tcheck_dist_x) > wnd_size.x * 2) {
+            if (tcheck_dist_x > 0) {
+                bullets[i].position.x -= game_surface.x;
+            } else {
+                bullets[i].position.x += game_surface.x;
+            }
+        }
+        int tcheck_dist_y = (bullets[i].position.y - arr_asteroid_a[j].position.y);
+        if (abs(tcheck_dist_y) > wnd_size.y * 2) {
+            printf("tcheck_dist_y: %d, bullet %d y: %f, asteroid y: %f\n",tcheck_dist_y, i, bullets[i].position.y, arr_asteroid_a[j].position.y);
+            if (tcheck_dist_y > 0) {
+                bullets[i].position.y -= game_surface.y;
+            } else {
+                bullets[i].position.y += game_surface.y;
+            }
+        }
+        //printf("bullet x: %f, y: %f, asteroid x: %f, y: %f\n", bullets[i].position.x, bullets[i].position.y, arr_asteroid_a[j].position.x, arr_asteroid_a[j].position.y);
+        */
                     if (CollisionBulletAsteroid(bullets[i], arr_asteroid_a[j], *spatial_ship)) {
                         bullets[i].collisioning = 1;
                         bullets[i].collision = arr_asteroid_a[j].position;
                         arr_asteroid_a[j].health -= bullets[i].damage;
+                        if (arr_asteroid_a[j].health == 0) {
+                            spatial_ship->score += 1;
+                        }
                         break;
                     }
                 }
                 // si le bullet n'a pas touché, lui rendre sa position originale pour qu'il puisse continuer son mouvement
-                //if (bullets[i].collisioning == 0) {
+                //if (bullets[i].collisioning == 0) {    // condition bug, don't work, cause the bullet stand as the position previously calculated.
                     bullets[i].position = originale_pos;
                 //}
             }
@@ -561,15 +600,7 @@ void Collision(Bullet* bullets, int bullet_size, Asteroid*** asteroids, SpatialS
     }
 }
 
-/*
-void Move(Bullet* *bullets, int bullet_size, SpatialShip *spatial_ship) {
-    moveSpatialShip(spatial_ship);
-    for (int i = 0; i < bullet_size; i++) {
-        moveBullet(bullets[i]);
-    }
-}
-*/
-
+// fonction servant à l'animation de l'explosion d'un astéroïde
 void ReduceAsteroidHealth(Asteroid*** *asteroids) {
     int max_x = game_surface.x / wnd_size.x;
     int max_y = game_surface.y / wnd_size.y;
@@ -586,7 +617,7 @@ void ReduceAsteroidHealth(Asteroid*** *asteroids) {
 
 
 
-
+// dessine les projectiles
 void DrawBullet(SDL_Renderer *renderer, Bullet bullet) {
     if (bullet.collisioning > 0) {
         // dessiner un nuage de 40 rectangles de couleur rouge ou gris, de 2 pixels de rayon, aux positions aléatoire comprise dans un rayon de 2 fois le rayon du bullet.*
@@ -624,6 +655,7 @@ void DrawBullet(SDL_Renderer *renderer, Bullet bullet) {
     }
 }
 
+// dessine les astéroïdes
 void DrawAsteroid(SDL_Renderer *renderer, Asteroid asteroid) {
     if (asteroid.health < -BULLET_EXPLOSION_DURATION) {
         return;
@@ -668,6 +700,7 @@ void DrawAsteroid(SDL_Renderer *renderer, Asteroid asteroid) {
     }
 }
 
+// dessine le vaisseau
 void DrawSpatialShip(SDL_Renderer *renderer, SpatialShip *spatial_ship) {
     if (spatial_ship->health <= 0) {
         // explosion du vaisseau
@@ -754,7 +787,8 @@ void DrawSpatialShip(SDL_Renderer *renderer, SpatialShip *spatial_ship) {
     }
 }
 
-void DrawHUD(SDL_Renderer *renderer, SpatialShip ship) {
+// dessiner le HUD, retourne la texture de rendu du score afin que la destruction de celle-ci ne cause pas de bug.
+SDL_Texture* DrawHUD(SDL_Renderer *renderer, SpatialShip ship) {
     // dessiner la barre de vie
     SDL_Rect fond_barre_vie = {(float)(wnd_size.x) * 0.1, (float)(wnd_size.y) * 0.95, (float)(wnd_size.x) * 0.1, (float)(wnd_size.y) * 0.025};
     SDL_SetRenderDrawColor(renderer, 60, 60, 60, 255);
@@ -766,8 +800,28 @@ void DrawHUD(SDL_Renderer *renderer, SpatialShip ship) {
     SDL_SetRenderDrawColor(renderer, 0, 200, 0, 255);
     SDL_RenderFillRect(renderer, &barre_vie);
     // écrire le score
+    char text[50];
+    sprintf(text, "Score: %d", ship.score);
+    // Rendre le texte
+    SDL_Surface* surface = TTF_RenderText_Solid(font, text, (SDL_Color) {255, 255, 255, 255});
+    if (!surface) {
+        fprintf(stderr, "Échec de rendu du texte: %s\n", TTF_GetError());
+        return NULL;
+    }
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_FreeSurface(surface);
+    if (!texture) {
+        fprintf(stderr, "Échec de création de la texture: %s\n", SDL_GetError());
+        return NULL;
+    }
+    SDL_Rect dstrect = {(float)(wnd_size.x) * 0.1, (float)(wnd_size.y) * 0.88, 0, 0};
+    //SDL_Rect dstrect = { 120, 120, 0, 0 };
+    SDL_QueryTexture(texture, NULL, NULL, &dstrect.w, &dstrect.h);
+    SDL_RenderCopy(renderer, texture, NULL, &dstrect);
+    return texture;
 }
 
+// dessiner le mini-map en haut à gauche de l'écran.
 void DrawMiniMap(SDL_Renderer *renderer, Asteroid*** asteroids, SpatialShip ship) {
     int size_x = wnd_size.x / 10;
     int size_y = wnd_size.y / 10;
@@ -814,7 +868,7 @@ void DrawMiniMap(SDL_Renderer *renderer, Asteroid*** asteroids, SpatialShip ship
 
 
 
-// retourne les index de colonne et de ligne des blocs visibles
+// retourne les index de colonne et de ligne des blocs visibles en fonction de la position donnée d'un objet
 Point* GetAdjacentBlocks(Point position) {
     int view_block_x = (position.x / wnd_size.x);
     int view_block_y = (position.y / wnd_size.y);
@@ -878,6 +932,7 @@ Asteroid* GetVisibleAsteroids(Asteroid*** asteroids, SpatialShip spatial_ship) {
     return visible_asteroids;
 }
 
+// retourne la position de l'objet sur l'écran
 Asteroid* CalculAsteroidScreenPosition(Asteroid* scene_object, SpatialShip spatial_ship) {
     for (int i = 0; i < ASTEROID_PER_BLOC * VISIBLE_BLOCK_NUMBER; i++) {
         int radius = CalculDrawRadius(scene_object[i].position, scene_object[i].radius, spatial_ship);
@@ -891,13 +946,29 @@ Asteroid* CalculAsteroidScreenPosition(Asteroid* scene_object, SpatialShip spati
 Bullet* BulletsScreenPosition(Bullet* bullets, int bullet_size, SpatialShip spatial_ship) {
     Bullet* screen_bullets = malloc(bullet_size * sizeof(Bullet));
     for (int i = 0; i < bullet_size; i++) {
-        Point screen_position = CalculObjectScreenPosition(bullets[i].position, spatial_ship);
-        screen_bullets[i] = (Bullet){screen_position, bullets[i].angle, bullets[i].distance, bullets[i].speed, bullets[i].radius, bullets[i].damage, bullets[i].collisioning, bullets[i].collision};
-        //screen_bullets[i].position = screen_position;
+        screen_bullets[i] = (Bullet){bullets[i].position, bullets[i].angle, bullets[i].distance, bullets[i].speed, bullets[i].radius, bullets[i].damage, bullets[i].collisioning, bullets[i].collision};
+        int tcheck_dist_x = (bullets[i].position.x - spatial_ship.position.x);
+        if (abs(tcheck_dist_x) > wnd_size.x * 2) {
+            if (tcheck_dist_x > 0) {
+                screen_bullets[i].position.x -= game_surface.x;
+            } else {
+                screen_bullets[i].position.x += game_surface.x;
+            }
+        }
+        int tcheck_dist_y = (bullets[i].position.y - spatial_ship.position.y);
+        if (abs(tcheck_dist_y) > wnd_size.y * 2) {
+            if (tcheck_dist_y > 0) {
+                screen_bullets[i].position.y -= game_surface.y;
+            } else {
+                screen_bullets[i].position.y += game_surface.y;
+            }
+        }
+        Point screen_position = CalculObjectScreenPosition(screen_bullets[i].position, spatial_ship);
+        screen_bullets[i].position = screen_position;
     }
     return screen_bullets;
 }
-
+// retourne un tableau d'astéroides trié par ordre de distance par rapport au haut de l'écran, axe y
 Asteroid* SortAsteroidSceneObject(Asteroid* scene_object) {
     // Simple bubble sort based on radius
     for (int i = 0; i < ASTEROID_PER_BLOC * VISIBLE_BLOCK_NUMBER; i++) {
@@ -911,7 +982,7 @@ Asteroid* SortAsteroidSceneObject(Asteroid* scene_object) {
     }
     return scene_object;
 }
-
+// retourne un tableau de balles trié par ordre de distance par rapport au haut de l'écran, axe y
 Bullet* SortBullet(Bullet* bullets, int bullet_size) {
     // Simple bubble sort based on distance
     for (int i = 0; i < bullet_size; i++) {
@@ -925,8 +996,8 @@ Bullet* SortBullet(Bullet* bullets, int bullet_size) {
     }
     return bullets;
 }
-
-void Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bullets, int bullet_number, SpatialShip *ship) {
+// appelle les fonctions de gestion de la scène et dessine les objets, retourne la texture du score afin d'éviter les bugs lors de la destruction de celle-ci
+SDL_Texture* Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bullets, int bullet_number, SpatialShip *ship) {
     Asteroid* visible_asteroids = GetVisibleAsteroids(asteroids, *ship);
     visible_asteroids = CalculAsteroidScreenPosition(visible_asteroids, *ship);
     visible_asteroids = SortAsteroidSceneObject(visible_asteroids);
@@ -950,7 +1021,6 @@ void Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bullets, int b
             ship_drawed = true;
         }
         DrawAsteroid(renderer, visible_asteroids[i]);
-        printf("? asteroid health: %d\n", visible_asteroids[i].health);
     }
     for (int i = bullets_index; i < bullet_number; i++) {
         DrawBullet(renderer, screen_pos_bullets[i]);
@@ -959,9 +1029,10 @@ void Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bullets, int b
         DrawSpatialShip(renderer, ship);
     }
     DrawMiniMap(renderer, asteroids, *ship);
-    DrawHUD(renderer, *ship);
+    SDL_Texture* texture = DrawHUD(renderer, *ship);
 
     free(visible_asteroids);
     free(screen_pos_bullets);
+    return texture;
 }
 
