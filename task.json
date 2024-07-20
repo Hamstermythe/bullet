@@ -1,0 +1,10 @@
+"args": [
+  "-o", "bullet.exe",
+  "bullet.c",
+  "-IC:/SDL2/include",
+  "-IC:/SDL2_ttf/include",
+  "-LC:/SDL2/lib",
+  "-LC:/SDL2_ttf/lib",
+  "-lSDL2",
+  "-lSDL2_ttf"
+]
