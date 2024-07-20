@@ -1,9 +1,10 @@
+#define SDL_MAIN_HANDLED
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_ttf.h>
 
 
 // Structure Definitions
@@ -55,12 +56,12 @@ typedef struct {
 } Asteroid;
 
 // Constants
-#define SPATIAL_SHIP_SPEED 5
-#define ASTEROID_VIEWING_DISTANCE 720
+#define SPATIAL_SHIP_SPEED 6
+#define ASTEROID_VIEWING_DISTANCE 1280
 #define BULLET_COOLDOWN_MS 250
 #define BULLET_LIFETIME 1200
 #define VISIBLE_BLOCK_NUMBER 9
-#define ASTEROID_PER_BLOC 1
+#define ASTEROID_PER_BLOC 2
 #define DEG_TO_RAD 0.017453292519943295769236907684886
 #define RAD_TO_DEG 57.295779513082320876798154814105
 #define BULLET_EXPLOSION_DURATION 24
@@ -68,9 +69,9 @@ typedef struct {
 // Globals
 int appli_step = 0;
 TTF_Font* font = NULL;
-Point wnd_size = {720, 540}; //{640, 480};
-Point spatial_ship_screen_position = {360, 405};
-Point game_surface = {0, 0}; //{1000000, 1000000};
+Point wnd_size = {1280, 960}; // {640, 480};
+Point spatial_ship_screen_position = {640, 810}; // {360, 405};
+Point game_surface = {0, 0}; // {1000000, 1000000};
 
 // Function Declarations
 int Appli_openning();
@@ -118,8 +119,15 @@ Bullet* SortBullet(Bullet* bullets, int bullet_size);
 SDL_Texture* Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bullets, int bullet_number, SpatialShip *ship);
 
 // Main Function
-//int main(int argc, char* argv[]) {
-int main() {
+int main(int argc, char *argv[]) {
+    if (argc > 1) {
+        if (strcmp(argv[1], "--help") == 0) {
+            printf("Space Shooter\n");
+            printf("A simple space shooter game\n");
+            printf("Usage: ./space_shooter\n");
+            return 0;
+        }
+    }
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         fprintf(stderr, "Could not initialize SDL: %s\n", SDL_GetError());
         return 1;
@@ -196,7 +204,7 @@ int Appli_openning() {
 SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *running, Uint32 *lastBulletShotTime, Asteroid*** *asteroids, Bullet* *bullets, int *bullet_size, SpatialShip *ship) {
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
-            running = false;
+            *running = false;
         } else if (event.type == SDL_KEYDOWN) {
             switch (event.key.keysym.sym) {
                 case SDLK_ESCAPE:
@@ -232,15 +240,15 @@ SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *runnin
         } else if (event.type == SDL_KEYUP) {
             switch (event.key.keysym.sym) {
                 case SDLK_LEFT:
-                    //if (ship->rotation_x == -1) {
+                    if (ship->rotation_x == -1) {
                         ship->rotation_x = 0;
-                        break;
-                    //}
+                    }
+                    break;
                 case SDLK_RIGHT:
-                    //if (ship->rotation_x == -1) {
+                    if (ship->rotation_x == 1) {
                         ship->rotation_x = 0;
-                        break;
-                    //}
+                    }
+                    break;
             }
         }
     }
@@ -418,7 +426,7 @@ void rotateSpatialShipRight(SpatialShip *ship) {
         return;
     }
     float angle = atan2(ship->angle.y, ship->angle.x) * RAD_TO_DEG;
-    angle += 2 + 180;  // Rotate by 1 degree
+    angle += 1 + 180;  // Rotate by 1 degree
     if (angle < 0) angle += 360;
     angle -= 180;
     angle *= DEG_TO_RAD;
@@ -431,7 +439,7 @@ void rotateSpatialShipLeft(SpatialShip *ship) {
         return;
     }
     float angle = atan2(ship->angle.y, ship->angle.x) * RAD_TO_DEG;
-    angle -= 2 + 180;  // Rotate by 1 degree
+    angle -= 1 + 180;  // Rotate by 1 degree
     if (angle > 360) angle -= 360;
     angle -= 180;
     angle *= DEG_TO_RAD;
@@ -502,6 +510,29 @@ void moveBullets(Bullet* bullets, int bullet_size) {
         bullets[i].position = gameSurfaceAntiDebordement(bullets[i].position);
     }
 }
+
+/* test de calibration pour que l'ellipse vérifie correctement lorsque le vaisseau est sur une diagonale
+bool CollisionBulletAsteroid(Bullet bullet, Asteroid asteroid, SpatialShip spatial_ship) {
+    int dist_with_ship = sqrt(pow(asteroid.position.x - spatial_ship.position.x, 2) + pow(asteroid.position.y - spatial_ship.position.y, 2));
+    float ratio_viewing_dist = 1.0 - ((float)dist_with_ship / (float)ASTEROID_VIEWING_DISTANCE);
+    if (ratio_viewing_dist <= 0) ratio_viewing_dist = 0;
+    int dist_bullet_asteroid = sqrt(pow(bullet.position.x - asteroid.position.x, 2) + pow(bullet.position.y - asteroid.position.y, 2));
+    bullet.position.y = asteroid.position.y + dist_bullet_asteroid;
+    bullet.position.x = asteroid.position.x;
+    float radius_multiplier_y = 0.25;// 0.25 + (0.75 * fabs(spatial_ship.angle.x));
+    float radius_multiplier_x = 1.0;// 0.25 + (0.75 * fabs(spatial_ship.angle.y));
+    // calculer les rayons x et y de l'ellipse
+    int radius_asteroid_y = (float)(asteroid.radius) * (float)(ratio_viewing_dist) * (float)(radius_multiplier_y);
+    int radius_asteroid_x = (float)(asteroid.radius) * (float)(ratio_viewing_dist) * (float)(radius_multiplier_x);
+    float dx = bullet.position.x - (asteroid.position.x);
+    float dy = bullet.position.y - asteroid.position.y;
+
+    if (((dx * dx) / (radius_asteroid_x * radius_asteroid_x)) + ((dy * dy) / (radius_asteroid_y * radius_asteroid_y)) <= 1) {
+        return true;
+    }
+    return false;
+}
+*/
 
 bool CollisionBulletAsteroid(Bullet bullet, Asteroid asteroid, SpatialShip spatial_ship) {
     int dist_with_ship = sqrt(pow(asteroid.position.x - spatial_ship.position.x, 2) + pow(asteroid.position.y - spatial_ship.position.y, 2));
