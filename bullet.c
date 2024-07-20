@@ -150,11 +150,11 @@ int main() {
     }
 
     game_surface = (Point) {wnd_size.x * 100, wnd_size.y * 100};
-    SpatialShip ship = {0, 0, SPATIAL_SHIP_SPEED, 100, 0, {20, 20}, {wnd_size.x, wnd_size.y}, {0, -1}, 0};
+    SpatialShip ship = {0, 0, SPATIAL_SHIP_SPEED, 100, 0, {20, 20}, {wnd_size.x*20, wnd_size.y*20}, {0, -1}, 0};
     Bullet* bullets = NULL;
     int bullet_size = 0;
     Asteroid*** asteroids = Space();
-    printf("Space created\n");
+    //printf("Space created\n");
     Uint32 lastBulletShotTime = SDL_GetTicks();
 
     bool running = true;
@@ -203,18 +203,16 @@ SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *runnin
                     *running = false;
                     break;
                 case SDLK_LEFT:
-                    rotateSpatialShipLeft(ship);
                     ship->rotation_x = -1;
-                    printf("spatial_ship angle x: %f  y: %f\n", ship->angle.x, ship->angle.y);
+                    //printf("spatial_ship angle x: %f  y: %f\n", ship->angle.x, ship->angle.y);
                     break;
                 case SDLK_RIGHT:
-                    rotateSpatialShipRight(ship);
                     ship->rotation_x = 1;
-                    printf("spatial_ship angle x: %f  y: %f\n", ship->angle.x, ship->angle.y);
+                    //printf("spatial_ship angle x: %f  y: %f\n", ship->angle.x, ship->angle.y);
                     break;
                 case SDLK_UP:
                     moveSpatialShip(ship);
-                    printf("\nspatial_ship position x: %f  y: %f\n", ship->position.x, ship->position.y);
+                    //printf("\nspatial_ship position x: %f  y: %f\n", ship->position.x, ship->position.y);
                     break;
                 case SDLK_SPACE:
                     if (SDL_GetTicks() - *lastBulletShotTime > BULLET_COOLDOWN_MS) {
@@ -234,15 +232,21 @@ SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *runnin
         } else if (event.type == SDL_KEYUP) {
             switch (event.key.keysym.sym) {
                 case SDLK_LEFT:
-                    ship->rotation_x = 0;
-                    break;
+                    //if (ship->rotation_x == -1) {
+                        ship->rotation_x = 0;
+                        break;
+                    //}
                 case SDLK_RIGHT:
-                    ship->rotation_x = 0;
-                    break;
+                    //if (ship->rotation_x == -1) {
+                        ship->rotation_x = 0;
+                        break;
+                    //}
             }
         }
     }
-    // moveSpatialShip(&ship);
+    rotateSpatialShipRight(ship);
+    rotateSpatialShipLeft(ship);
+    moveSpatialShip(ship);
     moveBullets(*bullets, *bullet_size);
     Collision(*bullets, *bullet_size, *asteroids, ship);
     // *bullet = RemoveBullet(*bullet, bullet_size); cause a leak in RemoveBullet function. Why?
@@ -328,8 +332,8 @@ Asteroid*** Space() {
     }
     for (int i = 0; i < lign_number; i++) {
         space[i] = lineOfSpace(i);
-        int asteroid_number = game_surface.x / wnd_size.x * i * ASTEROID_PER_BLOC;
-        printf("lign %d maked, number of asteroid is %d\n", i, asteroid_number);
+        //int asteroid_number = game_surface.x / wnd_size.x * i * ASTEROID_PER_BLOC;
+        //printf("lign %d maked, number of asteroid is %d\n", i, asteroid_number);
     }
     return space;
 }
@@ -410,8 +414,11 @@ void moveSpatialShip(SpatialShip *ship) {
 }
 
 void rotateSpatialShipRight(SpatialShip *ship) {
+    if (ship->rotation_x != 1) {
+        return;
+    }
     float angle = atan2(ship->angle.y, ship->angle.x) * RAD_TO_DEG;
-    angle += 1 + 180;  // Rotate by 1 degree
+    angle += 2 + 180;  // Rotate by 1 degree
     if (angle < 0) angle += 360;
     angle -= 180;
     angle *= DEG_TO_RAD;
@@ -420,8 +427,11 @@ void rotateSpatialShipRight(SpatialShip *ship) {
 }
 
 void rotateSpatialShipLeft(SpatialShip *ship) {
+    if (ship->rotation_x != -1) {
+        return;
+    }
     float angle = atan2(ship->angle.y, ship->angle.x) * RAD_TO_DEG;
-    angle -= 1 + 180;  // Rotate by 1 degree
+    angle -= 2 + 180;  // Rotate by 1 degree
     if (angle > 360) angle -= 360;
     angle -= 180;
     angle *= DEG_TO_RAD;
