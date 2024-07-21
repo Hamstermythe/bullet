@@ -118,7 +118,7 @@ Bullet* BulletsScreenPosition(Bullet* bullets, int bullet_size, SpatialShip spat
 Bullet* SortBullet(Bullet* bullets, int bullet_size);
 SDL_Texture* Scene(SDL_Renderer *renderer, Asteroid*** asteroids, Bullet* bullets, int bullet_number, SpatialShip *ship);
 
-// Main Function
+
 int main(int argc, char *argv[]) {
     if (argc > 1) {
         if (strcmp(argv[1], "--help") == 0) {
