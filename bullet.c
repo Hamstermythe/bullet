@@ -168,8 +168,8 @@ int main(int argc, char *argv[]) {
     bool running = true;
     SDL_Event event;
     SDL_Texture* texture;
-    printf("Game started\n");
     while (running) {
+        printf("Game loop tick\n");
         SDL_DestroyTexture(texture);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
@@ -182,6 +182,7 @@ int main(int argc, char *argv[]) {
         } else if (appli_step == 2) {
             appli_step = Appli_game_over();
         }
+        printf("menu func done\n");
 
         SDL_RenderPresent(renderer);
         SDL_Delay(16);
@@ -256,11 +257,13 @@ SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *runnin
             }
         }
     }
+    printf("events funcs done\n");
     rotateSpatialShipRight(ship);
     rotateSpatialShipLeft(ship);
     moveSpatialShip(ship);
     moveBullets(*bullets, *bullet_size);
     Collision(*bullets, *bullet_size, *asteroids, ship);
+    printf("physics funcs done\n");
     *bullets = RemoveBullet(*bullets, bullet_size);// cause a leak in RemoveBullet function. Why?
     // Bullet* temp = RemoveBullet(*bullets, bullet_size);
     // if (temp != NULL) {
@@ -270,8 +273,11 @@ SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *runnin
         // *bullets = NULL;
     // }
     // free(temp); cause a crash because bullets become empty. Why a laek is generated on bullets reallocation?
+    printf("bullets remover func done\n");
     SDL_Texture* texture = Scene(renderer, *asteroids, *bullets, *bullet_size, ship);
+    printf("scene func done\n");
     ReduceAsteroidHealth(asteroids);
+    printf("asteroid health reducer func done\n");
     /*
     if (ship->health <= -(float)(BULLET_EXPLOSION_DURATION)) {
         appli_step 2;
