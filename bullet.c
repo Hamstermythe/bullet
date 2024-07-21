@@ -209,6 +209,7 @@ int Appli_openning() {
 SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *running, Uint32 *lastBulletShotTime, Asteroid*** *asteroids, Bullet* *bullets, int *bullet_size, SpatialShip *ship) {
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
+            printf("SDL_QUIT event called\n");
             *running = false;
         } else if (event.type == SDL_KEYDOWN) {
             switch (event.key.keysym.sym) {
