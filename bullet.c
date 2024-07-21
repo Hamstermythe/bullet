@@ -174,6 +174,7 @@ int main(int argc, char *argv[]) {
         SDL_DestroyTexture(texture);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
+        */
 
         if (appli_step == 0) {
             appli_step = Appli_openning();
@@ -184,7 +185,6 @@ int main(int argc, char *argv[]) {
             appli_step = Appli_game_over();
         }
         printf("menu func done\n");
-        */
         SDL_RenderPresent(renderer);
         SDL_Delay(16);
     }
@@ -194,6 +194,7 @@ int main(int argc, char *argv[]) {
     free(bullets);
     printf("Space freed\n");
 
+    SDL_DestroyTexture(texture);
     TTF_CloseFont(font);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
