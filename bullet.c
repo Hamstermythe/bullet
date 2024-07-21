@@ -151,7 +151,7 @@ int main(int argc, char *argv[]) {
         SDL_Quit();
         return 1;
     }
-    font = TTF_OpenFont("./font/Ubuntu-MI.ttf", 24); // Remplacez par le chemin de votre police
+    font = TTF_OpenFont("font/Ubuntu-MI.ttf", 24); // Remplacez par le chemin de votre police
     if (!font) {
         fprintf(stderr, "Error: %s\n", TTF_GetError());
         return 1;
@@ -162,12 +162,13 @@ int main(int argc, char *argv[]) {
     Bullet* bullets = NULL;
     int bullet_size = 0;
     Asteroid*** asteroids = Space();
-    //printf("Space created\n");
-    Uint32 lastBulletShotTime = SDL_GetTicks();
+    printf("Space created\n");
 
+    Uint32 lastBulletShotTime = SDL_GetTicks();
     bool running = true;
     SDL_Event event;
     SDL_Texture* texture;
+    printf("Game started\n");
     while (running) {
         SDL_DestroyTexture(texture);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
@@ -186,14 +187,17 @@ int main(int argc, char *argv[]) {
         SDL_Delay(16);
     }
 
+    printf("Game ended\n");
     FreeSpace(asteroids);
     free(bullets);
+    printf("Space freed\n");
 
     TTF_CloseFont(font);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     TTF_Quit();
     SDL_Quit();
+    printf("SDL closed\n");
     return 0;
 }
 
@@ -224,14 +228,14 @@ SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *runnin
                     break;
                 case SDLK_SPACE:
                     if (SDL_GetTicks() - *lastBulletShotTime > BULLET_COOLDOWN_MS) {
-                        // *bullet = AddBullet(*bullet, bullet_size); cause a leak in AddBullet function. Why?
-                        Bullet* temp = AddBullet(*bullets, bullet_size, *ship);
-                        if (temp != NULL) {
+                        *bullets = AddBullet(*bullets, bullet_size, *ship);// cause a leak in AddBullet function. Why?
+                        // Bullet* temp = AddBullet(*bullets, bullet_size, *ship);
+                        // if (temp != NULL) {
                             // FUITE
-                            *bullets = realloc(temp, *bullet_size * sizeof(Bullet));
-                        } else {
-                            *bullets = NULL;
-                        }
+                            // *bullets = realloc(temp, *bullet_size * sizeof(Bullet));
+                        // } else {
+                            // *bullets = NULL;
+                        // }
                         // free(temp); cause a crash because bullets become empty. Why a laek is generated on bullets reallocation?
                         *lastBulletShotTime = SDL_GetTicks();
                     }
@@ -257,14 +261,14 @@ SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *runnin
     moveSpatialShip(ship);
     moveBullets(*bullets, *bullet_size);
     Collision(*bullets, *bullet_size, *asteroids, ship);
-    // *bullet = RemoveBullet(*bullet, bullet_size); cause a leak in RemoveBullet function. Why?
-    Bullet* temp = RemoveBullet(*bullets, bullet_size);
-    if (temp != NULL) {
+    *bullets = RemoveBullet(*bullets, bullet_size);// cause a leak in RemoveBullet function. Why?
+    // Bullet* temp = RemoveBullet(*bullets, bullet_size);
+    // if (temp != NULL) {
         // FUITE
-        *bullets = realloc(temp, *bullet_size * sizeof(Bullet));
-    } else {
-        *bullets = NULL;
-    }
+        // *bullets = realloc(temp, *bullet_size * sizeof(Bullet));
+    // } else {
+        // *bullets = NULL;
+    // }
     // free(temp); cause a crash because bullets become empty. Why a laek is generated on bullets reallocation?
     SDL_Texture* texture = Scene(renderer, *asteroids, *bullets, *bullet_size, ship);
     ReduceAsteroidHealth(asteroids);
@@ -295,7 +299,6 @@ int NewAsteroidRadius() {
     int rand_size = (float)(max_radius) * 0.9;
     int min_radius = (float)(max_radius) * 0.1;
     return (rand() % rand_size) + min_radius;
-
 }
 
 Asteroid* ChunkOfSpace(int bloc_position_y, int bloc_position_x) {
