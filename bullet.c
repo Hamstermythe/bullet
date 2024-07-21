@@ -151,7 +151,7 @@ int main(int argc, char *argv[]) {
         SDL_Quit();
         return 1;
     }
-    font = TTF_OpenFont("font/Ubuntu-MI.ttf", 24); // Remplacez par le chemin de votre police
+    font = TTF_OpenFont("./font/Ubuntu-MI.ttf", 24); // Remplacez par le chemin de votre police
     if (!font) {
         fprintf(stderr, "Error: %s\n", TTF_GetError());
         return 1;
