@@ -165,16 +165,15 @@ int main(int argc, char *argv[]) {
     printf("Space created\n");
 
     Uint32 lastBulletShotTime = SDL_GetTicks();
+    Uint32 last_frame_time = SDL_GetTicks();
     bool running = true;
     SDL_Event event;
     SDL_Texture* texture = NULL;
     while (running) {
         printf("Game loop tick\n");
-        /*
         if (texture != NULL) {
             SDL_DestroyTexture(texture);
         }
-        */
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
 
@@ -188,7 +187,10 @@ int main(int argc, char *argv[]) {
         }
         printf("menu func done\n");
         SDL_RenderPresent(renderer);
-        SDL_Delay(16);
+        Uint32 current_time = SDL_GetTicks();
+        if (current_time - last_frame_time < 16) {
+            SDL_Delay(16 - (current_time - last_frame_time));
+        }
     }
 
     printf("Game ended\n");
