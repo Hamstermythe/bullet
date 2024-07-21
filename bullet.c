@@ -167,14 +167,16 @@ int main(int argc, char *argv[]) {
     Uint32 lastBulletShotTime = SDL_GetTicks();
     bool running = true;
     SDL_Event event;
-    SDL_Texture* texture;
+    SDL_Texture* texture = NULL;
     while (running) {
         printf("Game loop tick\n");
         /*
-        SDL_DestroyTexture(texture);
+        if (texture != NULL) {
+            SDL_DestroyTexture(texture);
+        }
+        */
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
-        */
 
         if (appli_step == 0) {
             appli_step = Appli_openning();
