@@ -1,6 +1,7 @@
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
+#include <SDL2/SDL_mixer.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,18 +67,35 @@ typedef struct {
 #define RAD_TO_DEG 57.295779513082320876798154814105
 #define BULLET_EXPLOSION_DURATION 24
 
-// Globals
+// Globals variables 
+
+// intro duration
+int openning = 0;
+// current menu
 int appli_step = 0;
+// current font
 TTF_Font* font = NULL;
+// current shot sound
+Mix_Chunk *shot_sound = NULL;
+// current bullet explosion sound
+Mix_Chunk *bullet_explosion_sound = NULL;
+// current asteroid explosion sound
+Mix_Chunk *asteroid_explosion_sound = NULL;
+// current spatial ship collision sound
+Mix_Chunk *rayure_sound = NULL;
+// window size
 Point wnd_size = {1280, 960}; // {640, 480};
+// player screen position
 Point spatial_ship_screen_position = {640, 810}; // {360, 405};
+// game surface size
 Point game_surface = {0, 0}; // {1000000, 1000000};
 
 // Function Declarations
-int Appli_openning();
+SDL_Texture* Appli_openning(SDL_Renderer *renderer);
 SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *running, Uint32 *lastBulletShotTime, Asteroid*** *asteroids, Bullet* *bullets, int *bullet_size, SpatialShip *ship);
-int Appli_game_over();
+SDL_Texture* Appli_game_over(SDL_Renderer *renderer, SDL_Event event, bool *running, Asteroid*** *asteroids, Bullet* *bullets, int *bullet_size, SpatialShip *ship);
 
+SpatialShip NewSpatialShip();
 Point NewAsteroidPosition();
 Color NewAsteroidColor();
 int NewAsteroidRadius();
@@ -128,7 +146,8 @@ int main(int argc, char *argv[]) {
             return 0;
         }
     }
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+    // Initializations
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "Could not initialize SDL: %s\n", SDL_GetError());
         return 1;
     }
@@ -137,6 +156,13 @@ int main(int argc, char *argv[]) {
         SDL_Quit();
         return 1;
     }
+    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) { // Initialiser SDL_mixer
+        fprintf(stderr, "SDL_mixer could not initialize! SDL_mixer Error: %s\n", Mix_GetError());
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
+    // Variables initializations
     SDL_Window* window = SDL_CreateWindow("Space Shooter", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, wnd_size.x, wnd_size.y, SDL_WINDOW_SHOWN);
     if (window == NULL) {
         fprintf(stderr, "Could not create window: %s\n", SDL_GetError());
@@ -151,26 +177,55 @@ int main(int argc, char *argv[]) {
         SDL_Quit();
         return 1;
     }
-    font = TTF_OpenFont("font/Ubuntu-MI.ttf", 24); // Remplacez par le chemin de votre police
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    font = TTF_OpenFont("../font/Ubuntu-MI.ttf", 24); // Remplacez par le chemin de votre police
     if (!font) {
         fprintf(stderr, "Error: %s\n", TTF_GetError());
         return 1;
     }
+    shot_sound = Mix_LoadWAV("../sound/shot.wav");
+    if (shot_sound == NULL) {
+        fprintf(stderr, "Failed to load shot sound effect! SDL_mixer Error: %s\n", Mix_GetError());
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
+    bullet_explosion_sound = Mix_LoadWAV("../sound/bullet-explosion.wav");
+    if (bullet_explosion_sound == NULL) {
+        fprintf(stderr, "Failed to load bullet-explosion sound effect! SDL_mixer Error: %s\n", Mix_GetError());
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
+    asteroid_explosion_sound = Mix_LoadWAV("../sound/asteroid-explosion.wav");
+    if (asteroid_explosion_sound == NULL) {
+        fprintf(stderr, "Failed to load asteroid-explosion sound effect! SDL_mixer Error: %s\n", Mix_GetError());
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
+    rayure_sound = Mix_LoadWAV("../sound/rayure.wav");
+    if (rayure_sound == NULL) {
+        fprintf(stderr, "Failed to load rayure sound effect! SDL_mixer Error: %s\n", Mix_GetError());
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
 
     game_surface = (Point) {wnd_size.x * 100, wnd_size.y * 100};
-    SpatialShip ship = {0, 0, SPATIAL_SHIP_SPEED, 100, 0, {20, 20}, {wnd_size.x*20, wnd_size.y*20}, {0, -1}, 0};
+    SpatialShip ship = NewSpatialShip(); //{0, 0, SPATIAL_SHIP_SPEED, 100, 0, {20, 20}, {wnd_size.x*20, wnd_size.y*20}, {0, -1}, 0};
     Bullet* bullets = NULL;
     int bullet_size = 0;
     Asteroid*** asteroids = Space();
     printf("Space created\n");
 
+    openning = -wnd_size.x;
     Uint32 lastBulletShotTime = SDL_GetTicks();
-    Uint32 last_frame_time = SDL_GetTicks();
     bool running = true;
     SDL_Event event;
     SDL_Texture* texture = NULL;
     while (running) {
-        printf("Game loop tick\n");
+        Uint32 start = SDL_GetTicks();
         if (texture != NULL) {
             SDL_DestroyTexture(texture);
         }
@@ -178,44 +233,81 @@ int main(int argc, char *argv[]) {
         SDL_RenderClear(renderer);
 
         if (appli_step == 0) {
-            appli_step = Appli_openning();
-            appli_step = 1;
+            texture = Appli_openning(renderer);
         } else if (appli_step == 1) {
             texture = Appli_playing(renderer, event, &running, &lastBulletShotTime, &asteroids, &bullets, &bullet_size, &ship);
         } else if (appli_step == 2) {
-            appli_step = Appli_game_over();
+            texture = Appli_game_over(renderer, event, &running, &asteroids, &bullets, &bullet_size, &ship);
         }
-        printf("menu func done\n");
         SDL_RenderPresent(renderer);
         Uint32 current_time = SDL_GetTicks();
-        if (current_time - last_frame_time < 16) {
-            SDL_Delay(16 - (current_time - last_frame_time));
+        if (current_time - start < 16) {
+            SDL_Delay(16 - (current_time - start));
         }
     }
 
-    printf("Game ended\n");
     FreeSpace(asteroids);
     free(bullets);
-    printf("Space freed\n");
 
+    Mix_FreeChunk(shot_sound); // Libérer la mémoire du son
+    Mix_FreeChunk(bullet_explosion_sound); // Libérer la mémoire du son
+    Mix_FreeChunk(asteroid_explosion_sound); // Libérer la mémoire du son
+    Mix_FreeChunk(rayure_sound); // Libérer la mémoire du son
+    Mix_CloseAudio(); // Fermer SDL_mixer
     SDL_DestroyTexture(texture);
     TTF_CloseFont(font);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     TTF_Quit();
     SDL_Quit();
-    printf("SDL closed\n");
     return 0;
 }
 
-int Appli_openning() {
-    return 0;
+SDL_Texture* Appli_openning(SDL_Renderer *renderer) {
+    SDL_RenderClear(renderer);
+    font = TTF_OpenFont("../font/Ubuntu-MI.ttf", (int)((float)(wnd_size.y) * 0.1));
+    char text[50];
+    sprintf(text, "FullFreeGameplay");
+    SDL_Surface* surface = TTF_RenderText_Solid(font, text, (SDL_Color) {255, 255, 255, 255});
+    if (!surface) {
+        fprintf(stderr, "Échec de rendu du texte: %s\n", TTF_GetError());
+        return NULL;
+    }
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_FreeSurface(surface);
+    if (!texture) {
+        fprintf(stderr, "Échec de création de la texture: %s\n", SDL_GetError());
+        return NULL;
+    }
+    int text_width, text_height;
+    TTF_SizeText(font, text, &text_width, &text_height);
+    int marge = (wnd_size.x - text_width) / 2;
+    SDL_Rect dstrect = {marge, (float)(wnd_size.y) *0.45, 0, 0};
+    SDL_QueryTexture(texture, NULL, NULL, &dstrect.w, &dstrect.h);
+    SDL_RenderCopy(renderer, texture, NULL, &dstrect);
+    // rendre le dégradé d'opacité
+    int chunk_size = wnd_size.x / 255;
+    for (int i = 0; i < 255*2; i++) {
+        if (i > 255) {
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, i);
+        }
+        int x = (i * chunk_size) + openning;
+        SDL_Rect rect = {x, 0, chunk_size, wnd_size.y};
+        SDL_RenderFillRect(renderer, &rect);
+    }
+    openning += chunk_size;
+    if (openning >= (int)((float)(wnd_size.x) * 1.2)) {
+        font = TTF_OpenFont("../font/Ubuntu-MI.ttf", 24);
+        appli_step = 1;
+    }
+    return texture;
 }
 
 SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *running, Uint32 *lastBulletShotTime, Asteroid*** *asteroids, Bullet* *bullets, int *bullet_size, SpatialShip *ship) {
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
-            printf("SDL_QUIT event called\n");
             *running = false;
         } else if (event.type == SDL_KEYDOWN) {
             switch (event.key.keysym.sym) {
@@ -224,15 +316,12 @@ SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *runnin
                     break;
                 case SDLK_LEFT:
                     ship->rotation_x = -1;
-                    //printf("spatial_ship angle x: %f  y: %f\n", ship->angle.x, ship->angle.y);
                     break;
                 case SDLK_RIGHT:
                     ship->rotation_x = 1;
-                    //printf("spatial_ship angle x: %f  y: %f\n", ship->angle.x, ship->angle.y);
                     break;
                 case SDLK_UP:
                     moveSpatialShip(ship);
-                    //printf("\nspatial_ship position x: %f  y: %f\n", ship->position.x, ship->position.y);
                     break;
                 case SDLK_SPACE:
                     if (SDL_GetTicks() - *lastBulletShotTime > BULLET_COOLDOWN_MS) {
@@ -246,6 +335,7 @@ SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *runnin
                         // }
                         // free(temp); cause a crash because bullets become empty. Why a laek is generated on bullets reallocation?
                         *lastBulletShotTime = SDL_GetTicks();
+                        Mix_PlayChannel(-1, shot_sound, 0);
                     }
                     break;
             }
@@ -264,13 +354,11 @@ SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *runnin
             }
         }
     }
-    printf("events funcs done\n");
     rotateSpatialShipRight(ship);
     rotateSpatialShipLeft(ship);
     moveSpatialShip(ship);
     moveBullets(*bullets, *bullet_size);
     Collision(*bullets, *bullet_size, *asteroids, ship);
-    printf("physics funcs done\n");
     *bullets = RemoveBullet(*bullets, bullet_size);// cause a leak in RemoveBullet function. Why?
     // Bullet* temp = RemoveBullet(*bullets, bullet_size);
     // if (temp != NULL) {
@@ -280,28 +368,71 @@ SDL_Texture* Appli_playing(SDL_Renderer *renderer, SDL_Event event, bool *runnin
         // *bullets = NULL;
     // }
     // free(temp); cause a crash because bullets become empty. Why a laek is generated on bullets reallocation?
-    printf("bullets remover func done\n");
     SDL_Texture* texture = Scene(renderer, *asteroids, *bullets, *bullet_size, ship);
-    printf("scene func done\n");
     ReduceAsteroidHealth(asteroids);
-    printf("asteroid health reducer func done\n");
-    /*
     if (ship->health <= -(float)(BULLET_EXPLOSION_DURATION)) {
-        appli_step 2;
+        asteroids = NULL;
+        appli_step = 2;
     }
-    */
     return texture;
 }
 
-int Appli_game_over() {
-    return 2;
+SDL_Texture* Appli_game_over(SDL_Renderer *renderer, SDL_Event event, bool *running, Asteroid*** *asteroids, Bullet* *bullets, int *bullet_size, SpatialShip *ship) {
+    SDL_RenderClear(renderer);
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_QUIT) {
+            *running = false;
+        } else if (event.type == SDL_KEYDOWN) {
+            switch (event.key.keysym.sym) {
+                case SDLK_ESCAPE:
+                    *running = false;
+                    break;
+            }
+        } else if (event.type == SDL_MOUSEBUTTONDOWN) {
+            if (event.button.button == SDL_BUTTON_LEFT) {
+                if (event.button.x > wnd_size.x * 0.4 && event.button.x < wnd_size.x * 0.54 && event.button.y > wnd_size.y * 0.4 && event.button.y < wnd_size.y * 0.46) {
+                    *bullets = NULL;
+                    *bullet_size = 0;
+                    *asteroids = Space();
+                    *ship = NewSpatialShip();
+                    appli_step = 1;
+                }
+            }
+        }
+    }
+    // rendre l'emplacement cliquable
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_Rect rect = {wnd_size.x * 0.4, wnd_size.y * 0.4, wnd_size.x * 0.14, wnd_size.y * 0.06};
+    SDL_RenderFillRect(renderer, &rect);
+    // rendre le texte
+    char text[50];
+    sprintf(text, "Try Again");
+    SDL_Surface* surface = TTF_RenderText_Solid(font, text, (SDL_Color) {0, 0, 0, 255});
+    if (!surface) {
+        fprintf(stderr, "Échec de rendu du texte: %s\n", TTF_GetError());
+        return NULL;
+    }
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_FreeSurface(surface);
+    if (!texture) {
+        fprintf(stderr, "Échec de création de la texture: %s\n", SDL_GetError());
+        return NULL;
+    }
+    int text_width, text_height;
+    TTF_SizeText(font, text, &text_width, &text_height);
+    int marge_x = (((float)(wnd_size.x) * 0.14) - text_width) / 2;
+    int marge_y = (((float)(wnd_size.y) * 0.06) - text_height) / 2;
+    SDL_Rect dstrect = {((float)(wnd_size.x) * 0.4) + marge_x, ((float)(wnd_size.y) * 0.4)+ marge_y, 0, 0};
+    SDL_QueryTexture(texture, NULL, NULL, &dstrect.w, &dstrect.h);
+    SDL_RenderCopy(renderer, texture, NULL, &dstrect);
+    return texture;
 }
 
-
+SpatialShip NewSpatialShip() {
+    return (SpatialShip) {0, 0, SPATIAL_SHIP_SPEED, 100, 0, {20, 20}, {wnd_size.x*20, wnd_size.y*20}, {0, -1}, 0};
+}
 // Implementations of previously declared functions
 Point NewAsteroidPosition() {
-    //  debug values
-    // return (Point) {0, 0}; //wnd_size.x / 2, wnd_size.y / 2}; 
     return (Point) {rand() % (int)(wnd_size.x), rand() % (int)(wnd_size.y)};
 }
 Color NewAsteroidColor() {
@@ -356,8 +487,6 @@ Asteroid*** Space() {
     }
     for (int i = 0; i < lign_number; i++) {
         space[i] = lineOfSpace(i);
-        //int asteroid_number = game_surface.x / wnd_size.x * i * ASTEROID_PER_BLOC;
-        //printf("lign %d maked, number of asteroid is %d\n", i, asteroid_number);
     }
     return space;
 }
@@ -527,7 +656,7 @@ void moveBullets(Bullet* bullets, int bullet_size) {
     }
 }
 
-/* test de calibration pour que l'ellipse vérifie correctement lorsque le vaisseau est sur une diagonale
+/* test de calibration pour que l'ellipse vérifie correctement lorsque le vaisseau est sur une diagonale, rotation plan de façon à aligner sur l'axe x ou y
 bool CollisionBulletAsteroid(Bullet bullet, Asteroid asteroid, SpatialShip spatial_ship) {
     int dist_with_ship = sqrt(pow(asteroid.position.x - spatial_ship.position.x, 2) + pow(asteroid.position.y - spatial_ship.position.y, 2));
     float ratio_viewing_dist = 1.0 - ((float)dist_with_ship / (float)ASTEROID_VIEWING_DISTANCE);
@@ -633,6 +762,10 @@ void Collision(Bullet* bullets, int bullet_size, Asteroid*** asteroids, SpatialS
                         if (arr_asteroid_a[j].health == 0) {
                             spatial_ship->score += 1;
                         }
+                        Mix_PlayChannel(-1, bullet_explosion_sound, 0);
+                        if (arr_asteroid_a[j].health <= 0) {
+                            Mix_PlayChannel(-1, asteroid_explosion_sound, 0);
+                        }
                         break;
                     }
                 }
@@ -653,6 +786,10 @@ void Collision(Bullet* bullets, int bullet_size, Asteroid*** asteroids, SpatialS
         }
         if (CollisionSpatialShipAsteroid(*spatial_ship, arr_asteroid_b[i])) {
             spatial_ship->health--;
+            Mix_PlayChannel(-1, rayure_sound, 0);
+            if (spatial_ship->health == 0) {
+                Mix_PlayChannel(-1, asteroid_explosion_sound, 0);
+            }
         }
     }
 }
@@ -872,7 +1009,6 @@ SDL_Texture* DrawHUD(SDL_Renderer *renderer, SpatialShip ship) {
         return NULL;
     }
     SDL_Rect dstrect = {(float)(wnd_size.x) * 0.1, (float)(wnd_size.y) * 0.88, 0, 0};
-    //SDL_Rect dstrect = { 120, 120, 0, 0 };
     SDL_QueryTexture(texture, NULL, NULL, &dstrect.w, &dstrect.h);
     SDL_RenderCopy(renderer, texture, NULL, &dstrect);
     return texture;

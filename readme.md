@@ -14,15 +14,15 @@ You need touch ten times an obstacle for destruct him and win one point.
 
 Devs-informations:
 
-    If SDL2 is correctly installed on your device, you can use this command for the compilation from linux to:
+    If SDL2 is installed on your device, you can use this command for the compilation from linux to:
         -linux avec débogage: 
-            gcc -g -Wall -Wextra -pedantic -fsanitize=address -o bullet bullet.c -lm -lSDL2 -lSDL2_ttf
+            gcc -g -Wall -Wextra -pedantic -fsanitize=address -o bullet bullet.c -lm -lSDL2 -lSDL2_ttf -lSDL2_mixer
         -linux: 
-            gcc -o bullet bullet.c -lm -lSDL2 -lSDL2_ttf
+            gcc -o bullet bullet.c -lm -lSDL2 -lSDL2_ttf -lSDL2_mixer
         -windows: 
-            x86_64-w64-mingw32-gcc -o bullet.exe bullet.c -lm -lmingw32 -lSDL2main -lSDL2 -lSDL2_ttf -L/path/to/include/SDL2/lib -I/path/to/SDL2/include
+            x86_64-w64-mingw32-gcc -o bullet.exe bullet.c -lm -lmingw32 -lSDL2main -lSDL2 -lSDL2_ttf -lSDL2_mixer -L/path/to/include/SDL2/lib -I/path/to/SDL2/include
         -mac (not tested): 
-            o64-clang -o bullet bullet.c -lm -lSDL2 -lSDL2_ttf -L/path/to/SDL2/lib -I/path/to/SDL2/include
+            o64-clang -o bullet bullet.c -lm -lSDL2 -lSDL2_ttf -lSDL2_mixer -L/path/to/SDL2/lib -I/path/to/SDL2/include
 
 
     If you encounter problem with compiler you can use personal directory architecture for simplify the command and file access, example:
@@ -35,6 +35,7 @@ Devs-informations:
                         >SDL2/
                             SDL.h
                             SDL_ttf.h
+                            SDL_mixer.h
                     >lib/
                         >x64/
                             libSDL2.a
@@ -43,8 +44,11 @@ Devs-informations:
                             libSDL2_ttf.a
                             libSDL2_ttf.dll.a
                             SDL2_ttf.dll
+                            libSDL2_mixer.a
+                            libSDL2_mixer.dll.a
+                            SDL2_mixer.dll
             ________________________________
-            x86_64-w64-mingw32-gcc -v -o bullet.exe bullet.c -I"/path/to/win-SDL2/SDL2-windows/include" -L"/path/to/win-SDL2/SDL2-windows/lib/x64" -lSDL2 -lSDL2_ttf
+            x86_64-w64-mingw32-gcc -v -o bullet.exe bullet.c -I"/path/to/win-SDL2/SDL2-windows/include" -L"/path/to/win-SDL2/SDL2-windows/lib/x64" -lSDL2 -lSDL2_ttf -lSDL2_mixer
 
 
 
