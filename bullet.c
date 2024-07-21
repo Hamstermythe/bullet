@@ -170,6 +170,7 @@ int main(int argc, char *argv[]) {
     SDL_Texture* texture;
     while (running) {
         printf("Game loop tick\n");
+        /*
         SDL_DestroyTexture(texture);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
@@ -183,7 +184,7 @@ int main(int argc, char *argv[]) {
             appli_step = Appli_game_over();
         }
         printf("menu func done\n");
-
+        */
         SDL_RenderPresent(renderer);
         SDL_Delay(16);
     }
